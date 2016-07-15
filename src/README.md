@@ -9,24 +9,16 @@ Usage:
 
 > python pdsql.py {path}/pd2sql.properties resultsdirectory
 
-Suggested settings:
 
+Script configuration (defaults):
 
-#########################################################
-#
-#  python pdsql.py {path}/pd2sql.properties resultsdirectory
-#
-#  Generates SQL from Portrait Dialogue
-#
-#  Internal config (defaults):
-#
-#  replacekeys = True     # change them all to main table key, or leave as is
-#  allowsources = False   # maintain lookup source fields eg. gender as gender_pdsrc
-#  allowstrings = False   # Allow strings that are not lookups to propagate, (eg. perhaps for Cards table,
-                          # otherwise these fields are invisible & unusable in Explorer)
-#  write_sql = False      # Write SQL to results directory
-#  write_flat_files = True  # Write the flat files with the data in, in format suitable for FF2PE.py
-#  top_percent = 100      # sample the data in flat file export
+  replacekeys = True     # change them all to main table key, or leave as is
+  allowsources = False   # maintain lookup source fields eg. gender as gender_pdsrc
+  allowstrings = False   # Allow strings that are not lookups to propagate, (eg. perhaps for Cards table,
+                         # otherwise these fields are invisible & unusable in Explorer)
+  write_sql = False      # Write SQL to results directory
+  write_flat_files = True  # Write the flat files with the data in, in format suitable for FF2PE.py
+  top_percent = 100      # sample the data in flat file export
 
 I suggest running initially with (write_sql=True, top_percent=0.01) initially to check groups,
 and that SQL is okay or needs a hack
