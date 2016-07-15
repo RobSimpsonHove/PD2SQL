@@ -10,7 +10,7 @@
 
 # Usage:
 
-> python pdsql.py {path}/pd2sql.properties resultsdirectory
+> python pdsql.py {path}/pd2sql.properties datadir
 
 # Output:
 
