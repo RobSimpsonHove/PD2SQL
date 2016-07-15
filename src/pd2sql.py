@@ -17,6 +17,7 @@ import re
 import sys
 import csv
 import warnings
+import time
 import xml.etree.ElementTree as ET
 from configparser import ConfigParser
 
@@ -50,8 +51,9 @@ write_sql = False
 write_flat_files = True
 top_percent = 0.1
 
+now = time.strftime("%Y%m%d-%H%M%S")
 pe_properties = sys.argv[1]
-sqldir = sys.argv[2]
+resultsdir = sys.argv[2]
 parser = ConfigParser()
 # Open the properties file with the correct encoding
 with codecs.open(pe_properties, 'r', encoding='utf-8') as f:
@@ -59,8 +61,12 @@ with codecs.open(pe_properties, 'r', encoding='utf-8') as f:
 
 warnings.simplefilter('error', UnicodeWarning)
 
-if not os.path.exists(sqldir):
-    os.makedirs(sqldir)
+if not os.path.exists(resultsdir):
+    os.makedirs(resultsdir)
+
+resultssubdir=resultsdir+'/'+now+'/'
+if not os.path.exists(resultssubdir):
+    os.makedirs(resultssubdir)
 
 
 class ExplorerDomain:
@@ -194,25 +200,34 @@ class ExplorerDomain:
                 sql = self.sqlgroups[group]['select fields sql']
 
                 if write_sql:
-                    f = open(sqldir + '\\' + group + '.sql', 'w')
+                    f = open(resultssubdir + group + '.sql', 'w')
                     f.write(sql)
                     f.close()
                     print('Written SQL for', group)
 
                 if write_flat_files:
                     try:
-                        os.makedirs(sqldir + '\\' + group + '_wrap')
+                        os.makedirs(resultssubdir + group + '_wrap')
                     except:
                         pass
 
                     connection = pyodbc.connect(db)
                     cursor = connection.cursor()
                     cursor.execute(sql)
-                    with open(sqldir + '\\' + group + '_wrap\\export.txt', 'w') as f:
+                    with open(resultssubdir  + group + '_wrap/export.txt', 'w') as f:
                         csv.writer(f, quoting=csv.QUOTE_ALL, lineterminator='\n', quotechar='~',
                                    delimiter='|').writerows(cursor)
                     connection.close()
                     print('Written flat files for', group)
+
+                status = ConfigParser()
+                status['python'] = {}
+                status['python']['export'] = now
+                status['python']['separator'] = '|'
+                status['python']['quote'] = '~'
+                status['python']['status'] = self.domain
+                with codecs.open(resultsdir + '/status_properties', 'w') as f:
+                    status.write(f)
 
         return self.sqlgroups
 
@@ -369,7 +384,7 @@ class ExplorerDomain:
         xml_dataobjectcollections = ET.SubElement(dataobject, 'dataobjectcollections')
         junk = self.write_group_xml(xml_dataobjectcollections, 'dataobjectcollection', self.onetomany)
 
-        outFile = open(sqldir + '\\ADSmetadata.xml', 'wb')
+        outFile = open(resultsdir + '\\ADSmetadata.xml', 'wb')
         doc = ET.ElementTree(root)
         doc.write(outFile)  # , encoding='utf-8', xml_declaration=True)
         outFile.close()

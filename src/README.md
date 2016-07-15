@@ -4,7 +4,6 @@
 # Files:
 *pd2sql.py* - Generates SQL, and/or flat files for selected groups in Portrait Dialogue
 
-
 *pd2sql.properties*   - Configuration, points to Domain, database, and optionally selected groups
 
 *pdsys_sql.py*        - Contains sql for extracting tables, lookups and fields from PDSYS
@@ -12,6 +11,17 @@
 # Usage:
 
 > python pdsql.py {path}/pd2sql.properties resultsdirectory
+
+# Output:
+
+- resultsdirectory/status_properties
+- resultsdirectory/ADSmetadata
+- resultsdirectory/YYYYMMDD-HHMMSS/
+- resultsdirectory/YYYYMMDD-HHMMSS/Group1_wrap/
+- resultsdirectory/YYYYMMDD-HHMMSS/Group1_wrap/export.txt
+- resultsdirectory/YYYYMMDD-HHMMSS/Group2_wrap/
+- resultsdirectory/YYYYMMDD-HHMMSS/Group2_wrap/export.txt
+and so on
 
 
 # Script configuration (defaults):
