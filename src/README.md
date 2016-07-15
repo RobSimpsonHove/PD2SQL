@@ -1,7 +1,9 @@
+# PD2SQL Extracts data or SQL from Portrait Dialogue domain
+# Use in conjunction with FF2PE to load flat files into Explorer
 
 # Files:
 *pd2sql.py* - Generates SQL, and/or flat files for selected groups in Portrait Dialogue
-            - Use in conjunction with FF2PE to load flat files into Explorer
+
 
 *pd2sql.properties*   - Configuration, points to Domain, database, and optionally selected groups
 
