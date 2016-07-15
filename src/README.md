@@ -15,9 +15,9 @@
 # Output:
 
 - resultsdirectory/status_properties
-- resultsdirectory/ADSmetadata
-- resultsdirectory/YYYYMMDD-HHMMSS/
-- resultsdirectory/YYYYMMDD-HHMMSS/Group1_wrap/
+- resultsdirectory/ADSmetadata                          Points to datestamp dirs, flat file format
+- resultsdirectory/YYYYMMDD-HHMMSS/                     Identifies tables structures and relationships
+- resultsdirectory/YYYYMMDD-HHMMSS/Group1_wrap/         Flat file separated data
 - resultsdirectory/YYYYMMDD-HHMMSS/Group1_wrap/export.txt
 - resultsdirectory/YYYYMMDD-HHMMSS/Group2_wrap/
 - resultsdirectory/YYYYMMDD-HHMMSS/Group2_wrap/export.txt
