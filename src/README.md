@@ -10,17 +10,17 @@
 
 # Usage:
 
-> python pdsql.py {path}/pd2sql.properties datadir
+> python pdsql.py {path}/pd2sql.properties (datadir)
 
 # Output:
 
-- resultsdirectory/status_properties
-- resultsdirectory/ADSmetadata                          Points to datestamp dirs, flat file format
-- resultsdirectory/YYYYMMDD-HHMMSS/                     Identifies tables structures and relationships
-- resultsdirectory/YYYYMMDD-HHMMSS/Group1_wrap/         Flat file separated data
-- resultsdirectory/YYYYMMDD-HHMMSS/Group1_wrap/export.txt
-- resultsdirectory/YYYYMMDD-HHMMSS/Group2_wrap/
-- resultsdirectory/YYYYMMDD-HHMMSS/Group2_wrap/export.txt
+- (datadir)/status_properties
+- (datadir)/ADSmetadata                          Points to datestamp dirs, flat file format
+- (datadir)/YYYYMMDD-HHMMSS/                     Identifies tables structures and relationships
+- (datadir)/YYYYMMDD-HHMMSS/Group1_wrap/         Flat file separated data
+- (datadir)/YYYYMMDD-HHMMSS/Group1_wrap/export.txt
+- (datadir)/YYYYMMDD-HHMMSS/Group2_wrap/
+- (datadir)/YYYYMMDD-HHMMSS/Group2_wrap/export.txt
 and so on
 
 

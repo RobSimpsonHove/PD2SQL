@@ -226,7 +226,7 @@ class ExplorerDomain:
                 status['python']['separator'] = '|'
                 status['python']['quote'] = '~'
                 status['python']['status'] = self.domain
-                with codecs.open(resultsdir + '/status_properties', 'w') as f:
+                with codecs.open(resultsdir + '/status.properties', 'w') as f:
                     status.write(f)
 
         return self.sqlgroups
@@ -376,13 +376,13 @@ class ExplorerDomain:
         # xml_topdataobjects = ET.SubElement(root, 'dataobjects', xsi="http://www.w3.org/2001/XMLSchema-instance",
         #                                xsd="http://www.w3.org/2001/XMLSchema",
         #                                xmlns="http://services.analytics.portrait.pb.com/")
-        dataobject = self.write_group_xml(root, 'dataobject', [self.main])
+        dataobject = self.write_group_xml(root, 'dataobject', [self.main],'main')
 
         xml_dataobjects = ET.SubElement(dataobject, 'dataobjects')
-        junk = self.write_group_xml(xml_dataobjects, 'dataobject', self.onetoone)
+        junk = self.write_group_xml(xml_dataobjects, 'dataobject', self.onetoone,'onetoone')
 
         xml_dataobjectcollections = ET.SubElement(dataobject, 'dataobjectcollections')
-        junk = self.write_group_xml(xml_dataobjectcollections, 'dataobjectcollection', self.onetomany)
+        junk = self.write_group_xml(xml_dataobjectcollections, 'dataobjectcollection', self.onetomany,'onetomany')
 
         outFile = open(resultsdir + '\\ADSmetadata.xml', 'wb')
         doc = ET.ElementTree(root)
@@ -394,13 +394,19 @@ class ExplorerDomain:
         # f.close()
 
 
-    def write_group_xml(self, parent, name, list):
+    def write_group_xml(self, parent, name, list,grouptype):
         # print( 'Doing', list)
         xml_object = None
         for group in list:
             xml_object = ET.SubElement(parent, name, tablename=group, displayname=group, name=group, visible="true")
-            xml_primarykeys_g = ET.SubElement(xml_object, 'primarykeys')
-            xml_primarykey_g = ET.SubElement(xml_primarykeys_g, 'primarykey', columnname=self.mainkey())
+            if grouptype in ('main','onetoone'):
+                xml_primarykeys_g = ET.SubElement(xml_object, 'primarykeys')
+                xml_primarykey_g = ET.SubElement(xml_primarykeys_g, 'primarykey', columnname=self.mainkey())
+
+            if grouptype in ('onetoone','onetomany'):
+                xml_foreignkeys_g = ET.SubElement(xml_object, 'foreignkeys')
+                xml_foreignkey_g = ET.SubElement(xml_foreignkeys_g, 'foreignkey', columnname=self.mainkey())
+
             xml_fields_g = ET.SubElement(xml_object, 'fields')
 
             for f in range(len(self.sqlgroups[group]['finalfields'])):
