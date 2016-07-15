@@ -34,7 +34,7 @@ import pdsys_sql  # Local file with system table SQL
 ###   DONE write unicode xml
 ###   TODO *xmlns:xsi stuff in xml namespaces
 ###
-###   TODO test against non-latin1 fieldnames/groups
+###   DONE test against non-latin1 fieldnames/groups
 ###         UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe6 in position 10: invalid continuation byte
 ###
 ###   TODO test what happens if you leave the keys as they are
@@ -43,11 +43,10 @@ import pdsys_sql  # Local file with system table SQL
 ###   DONE!! Groups - all lookups are group.  Non-lookup strings are not, therefore not visible.
 ###   DONE - first numeric non-key is set as Objective
 
-
 replacekeys = True
-allowsources = True
-allowstrings = True
-write_sql = True
+allowsources = False
+allowstrings = False
+write_sql = False
 write_flat_files = True
 top_percent = 0.1
 
@@ -98,10 +97,8 @@ class ExplorerDomain:
         self.make_group_lists()
 
         # Generate SQL
-        # print('aaa')
         self.group_sql(self.pddb)
 
-        # print(( 'Main fields',self.sqlgroups[self.main]['finalfields']))
         self.create_xml()
 
     def groups(self):
@@ -132,7 +129,7 @@ class ExplorerDomain:
                     print(("No groups or xgroups specified. Will load all."))
                     self._groups = querytolist(self.groupnamesql % self.domain, self.pddb)
 
-        print(('Groups:', self._groups))
+            print('Groups:', self._groups)
 
         return self._groups
 
@@ -142,17 +139,14 @@ class ExplorerDomain:
         self.onetomany = []
 
         for group in self.groups():
-            print(group)
             if self.pdgroups[group]['cdd_parent_cdd_id'] == 'NULL' or self.pdgroups[group]['cdd_parent_cdd_id'] == None:
-                print('aaa')
                 self.main = group
-
             else:
-                print(self.pdgroups[group])
                 if self.pdgroups[group]['cdd_one_to_many'] == 'T':
                     self.onetomany.append(group)
                 else:
                     self.onetoone.append(group)
+
         print('main:', self.main)
         print('onetoone:', self.onetoone)
         print('onetomany:', self.onetomany)
@@ -175,7 +169,7 @@ class ExplorerDomain:
                 else:
                     self.sqlgroups[group]['key'] = self.pdgroups[group]['cdf2']
                 print('KEY,', group, self.pdgroups[group]['cdd_key'], self.pdgroups[group]['cdf1'])
-                print(self.pdgroups[group])
+                #print(self.pdgroups[group])
 
                 ## Replace key with mainkey if necessary, (and don't currently replace lookup source fieldnames)
                 ## and any given group.hack or all.hack
@@ -192,14 +186,14 @@ class ExplorerDomain:
                                                         + self.sqlgroups[group]['hacked'] \
                                                         + ' ) origsql  ) origsql2' \
                                                         + self.sqlgroups[group]['bottomlu']
-                print('SQL TYPE', self.sqlgroups[group]['expanded_sql'])
+                #print('SQL TYPE', self.sqlgroups[group]['expanded_sql'])
 
                 # Wrap in field selector
                 self.select_fields(group, self.pddb)
-                print('Selected fields', (self.sqlgroups[group]['select fields sql']))
+                #print('Selected fields:', (self.sqlgroups[group]['select fields sql']))
+                sql = self.sqlgroups[group]['select fields sql']
 
                 if write_sql:
-                    sql = self.sqlgroups[group]['select fields sql']
                     f = open(sqldir + '\\' + group + '.sql', 'w')
                     f.write(sql)
                     f.close()
@@ -218,7 +212,6 @@ class ExplorerDomain:
                         csv.writer(f, quoting=csv.QUOTE_ALL, lineterminator='\n', quotechar='~',
                                    delimiter='|').writerows(cursor)
                     connection.close()
-
                     print('Written flat files for', group)
 
         return self.sqlgroups
@@ -279,7 +272,7 @@ class ExplorerDomain:
 
         self.sqlgroups[group]['selectedtypes'] = selectedtypes
         self.sqlgroups[group]['selectedsizes'] = selectedsizes
-        print('Selected fields', self.sqlgroups[group]['selectedfields'])
+        #print('Selected fields', self.sqlgroups[group]['selectedfields'])
 
         # Replace irregular key with main key, if required
         if replacekeys and self.sqlgroups[group]['key'] != self.mainkey():
@@ -462,7 +455,7 @@ def explorer_type(type, lookup):
     else:
         ConvertedType = type
 
-    print('TYPE:', type, ConvertedType)
+    #print('TYPE:', type, ConvertedType)
     return ConvertedType
 
 
@@ -475,10 +468,6 @@ def get_field_info(sql, db):
     connection = pyodbc.connect(db)
     cur = connection.cursor()
 
-    # print('SQL TYPE:',type(sql))
-    # f = open(sqldir + '\\' + 'test' + '.sql', 'w')
-    # f.write(sql)
-    # f.close()
     try:
         print('Submitting SQL...')
         x = cur.execute(sql)
@@ -527,7 +516,7 @@ def querytodict(db, sql, n):
         x = cur.execute(sql)
     except:
         print(sql)
-        print('SQL error in query():')
+        print('SQL error in querytodict():')
         raise
 
     rows = x.fetchall()
@@ -537,11 +526,8 @@ def querytodict(db, sql, n):
 
     d = {}
 
-    # print('New TABLE')
-    # print(sql)
     for r in rows:
         d[r[n]] = {}
-        # print('RRRR',r,)
         d[r[n]] = dict(zip(fields, r))
     connection.close()
 
@@ -558,16 +544,3 @@ def querytodict(db, sql, n):
 pe = ExplorerDomain()
 
 
-
-# a,b,c=ExplorerXmlGroups('C:\\Users\\PBDIA00022\\PycharmProjects\\PD2SQL\\test\\cheese\\ADSmetadata.xml')
-
-# print( 'a:',a)
-# print( 'b:',b)
-# print( 'c:',c)
-
-
-
-# print( pe.groups())
-# print( pe.main)
-# pe.group_sql()
-# print( pe.group_sql()['Giver']['sql'])
