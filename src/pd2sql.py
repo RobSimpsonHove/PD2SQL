@@ -515,8 +515,9 @@ def get_field_info(sql, db):
 
 def querytolist(sql, db):
     connection = pyodbc.connect(db)
-
-    x = connection.execute(sql)
+    print('CONNECTION', connection)
+    cursor=connection.cursor()
+    x = cursor.execute(sql)
     row = x.fetchall()
     results = []
     for i in row:
