@@ -16,8 +16,8 @@ FROM [SQL_DEFINITION] as sd,
 [CUST_DOMAIN_DATA] as cdd
 where sd.SD_ID = ss.SS_SD_ID
 and  ss.SS_SD_ID= cdd.CDD_SD_ID
---and cdd.CDD_IS_SYSTEM_GROUP='F'
---and cdd.CDD_ADVANCED_USE_ONLY='F'
+and cdd.CDD_IS_SYSTEM_GROUP='F'
+and cdd.CDD_ADVANCED_USE_ONLY='F'
 and cdd.CDD_CD_ID='%s'
 ) a
                 left join
@@ -42,7 +42,9 @@ where ss_database_plugin = 'SQLSERVER' or ss_database_plugin is null"""
 
 lookupsql = """
 SELECT distinct
-d.cdd_name
+--
+d.cdd_name,
+e.[CDF_FIELDNAME] as outfield
 ,a.[CDF_ID]
 ,a.[CDF_CDD_ID]
 ,a.[CDF_FIELDNAME]
