@@ -1,7 +1,6 @@
 tablesql = """
 select * from (
 select
---sd.SD_SQL_NAME,
 cdd.cdd_id,
 cdd.cdd_name,
 cdd.cdd_parent_cdd_id,
@@ -14,31 +13,18 @@ cdd.CDD_ID_SOURCE_FIELDNAME as CDD_KEY
 FROM [SQL_DEFINITION] as sd,
 [SQL_STATEMENT] as ss,
 [CUST_DOMAIN_DATA] as cdd
+
 where sd.SD_ID = ss.SS_SD_ID
 and  ss.SS_SD_ID= cdd.CDD_SD_ID
 and cdd.CDD_IS_SYSTEM_GROUP='F'
 and cdd.CDD_ADVANCED_USE_ONLY='F'
-and cdd.CDD_CD_ID='%s'
-) a
-                left join
-(
-SELECT
-cdf1.cdf_source_fieldname as cdf1,
-cdf2.cdf_source_fieldname as cdf2,
-cdf2.cdf_cdd_id
-FROM [CUST_DOMAIN_PARAM]
-inner join CUST_DOMAIN_DATA
-on cdd_id = cdp_cdd_id
-inner join cust_domain_field as cdf2
-on cdf2.cdf_cdd_id = cdd_id
-and cdf2.cdf_fieldname = CDP_PARAMNAME
-inner join cust_domain_field as cdf1
-on cdf1.cdf_cdd_id = cdd_parent_cdd_id
-and cdf1.cdf_fieldname = CDP_BOUND_TO_FIELDNAME
---and cdf1.cdf_source_fieldname='${mainkey}'  NOT SURE ABOUT THIS
-) cdf
-on  cdf.CDF_CDD_ID=a.CDD_ID
-where ss_database_plugin = 'SQLSERVER' or ss_database_plugin is null"""
+and cdd.CDD_CD_ID='%s') a
+left join
+(select CDP_CDD_ID
+      ,CDP_PARAMNAME
+	  ,CDP_BOUND_TO_FIELDNAME from CUST_DOMAIN_PARAM) p
+on p.cdp_cdd_id=a.CDD_ID
+and (p.CDP_BOUND_TO_FIELDNAME='mh_customer_id' or p.CDP_BOUND_TO_FIELDNAME='customerID')"""
 
 lookupsql = """
 SELECT distinct
@@ -84,7 +70,7 @@ CDD_NAME+'__'+lower(cdf_source_fieldname) as group__field
 ,CDF_DESC as description
 ,cdf_datatype as type
 ,cdf_size as size
-FROM [CUST_DOMAIN_FIELD], CUST_DOMAIN_DATA
-where cdf_cdd_id=CDD_ID
+FROM [CUST_DOMAIN_FIELD] cdf, CUST_DOMAIN_DATA cdd
+where cdf.cdf_cdd_id=cdd.CDD_ID
 and CDF_TYPE='DATA'
 """

@@ -209,16 +209,16 @@ class ExplorerDomain:
                 # print( 'Processing group:', group)
                 self.sqlgroups[group] = {}
                 ## Get key for group
-                print('keys:',group, self.pdgroups[group]['cdf2'],self.pdgroups[group]['cdd_key'], self.pdgroups[group]['cdd_parent_cdd_id'] )
+                print('keys:',group, self.pdgroups[group]['cdp_paramname'],self.pdgroups[group]['cdd_key'], self.pdgroups[group]['cdd_parent_cdd_id'] )
                 # CDD_
                 if self.pdgroups[group]['cdd_parent_cdd_id'] == 'NULL' or self.pdgroups[group]['cdd_parent_cdd_id'] == None:
                     self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_key']
-                elif self.pdgroups[group]['cdf2'] == 'NULL' or self.pdgroups[group]['cdf2'] == None:
+                elif self.pdgroups[group]['cdp_paramname'] == 'NULL' or self.pdgroups[group]['cdp_paramname'] == None:
                     #self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_key']
                     print('KEY error on '+group)
                     raise
                 else:
-                    self.sqlgroups[group]['key'] = self.pdgroups[group]['cdf2']
+                    self.sqlgroups[group]['key'] = self.pdgroups[group]['cdp_paramname']
 
 
                 ## Replace key with mainkey if necessary, (and don't currently replace lookup source fieldnames)
@@ -354,6 +354,10 @@ class ExplorerDomain:
 
             if source==self.sqlgroups[group]['key']:
                 self.sqlgroups[group]['key']=rename
+
+        selectedfieldsql = re.sub('(,|^)[^ ]+(,|$)',r'\1', selectedfieldsql)
+
+        print('s6', selectedfieldsql)
 
         self.sqlgroups[group]['selectedtypes'] = selectedtypes
         self.sqlgroups[group]['selectedsizes'] = selectedsizes
@@ -671,6 +675,7 @@ def querytodict(sql, db, n):
         connection = sqlite3.connect(db)
 
     else:
+        print('DB',db)
         connection = pypyodbc.connect(db)
 
     cursor = connection.cursor()
