@@ -3,6 +3,7 @@ select * from (
 select
 cdd.cdd_id,
 cdd.cdd_name,
+cdd.cdd_cd_id,
 cdd.cdd_parent_cdd_id,
 cdd.[CDD_ONE_TO_MANY],
 ss.ss_database_plugin,
@@ -18,13 +19,24 @@ where sd.SD_ID = ss.SS_SD_ID
 and  ss.SS_SD_ID= cdd.CDD_SD_ID
 and cdd.CDD_IS_SYSTEM_GROUP='F'
 and cdd.CDD_ADVANCED_USE_ONLY='F'
-and cdd.CDD_CD_ID='%s') a
+and cdd.CDD_CD_ID=%s) a
 left join
 (select CDP_CDD_ID
       ,CDP_PARAMNAME
 	  ,CDP_BOUND_TO_FIELDNAME from CUST_DOMAIN_PARAM) p
 on p.cdp_cdd_id=a.CDD_ID
-and (p.CDP_BOUND_TO_FIELDNAME='mh_customer_id' or p.CDP_BOUND_TO_FIELDNAME='customerID')"""
+and (p.CDP_BOUND_TO_FIELDNAME='mh_customer_id'
+or p.CDP_BOUND_TO_FIELDNAME in
+	(
+	select  cdf_fieldname from CUST_DOMAIN_FIELD
+	 join (
+	--main group and keyfield
+	select cdd.cdd_id, cdd.CDD_ID_SOURCE_FIELDNAME from CUST_DOMAIN_DATA cdd where cdd_id in (
+	select CDD_ID from  [CUST_DOMAIN_DATA] where CDD_PARENT_CDD_ID IS NULL AND CDD_CD_ID=a.cdd_cd_id)
+	) aa
+	on aa.cdd_id=CDF_CDD_ID and aa.CDD_ID_SOURCE_FIELDNAME=cdf_source_fieldname
+	)
+)"""
 
 lookupsql = """
 SELECT distinct
@@ -58,6 +70,7 @@ and c.SS_SD_ID=b.[cdl_sd_id]
 and d.CDD_ID=a.[CDF_CDD_ID]
 and a.[CDF_LOOKUP_KEY_CDF_FIELDNAME]=e.cdf_fieldname
 and d.CDD_ID=e.[CDF_CDD_ID]
+and e.CDF_ADVANCED_USE_ONLY='F'
 and d.CDD_CD_ID=%s
 """
 

@@ -18,11 +18,11 @@ import configparser
 
 ########################################  FROM ANWB 5th Feb
 ###
-###   TO-DO
+###
 ###   DONE suppress strings - now an option
 ###
 ###   DONE  xml subprocedure for main, o2o and o2m
-### TODO match key by looping through (lower)fieldnames
+### DONE match key by looping through (lower)fieldnames
 ###   Index query dictionaries by fieldname instead of number
 ###
 ###   DONE Top only xml declaration
@@ -32,7 +32,7 @@ import configparser
 ###   DONE test against non-latin1 fieldnames/groups
 
 
-###   TODO test what happens if you leave the keys as they are
+###   DONE test what happens if you leave the keys as they are
 ###   DONE !! pick up types from lookup fields
 ###   DONE!! pass Explorer types across to metadata (don't translate)  and dbtype
 ###   DONE!! Groups - all lookups are group.  Non-lookup strings are not, therefore not visible.
@@ -126,7 +126,7 @@ class ExplorerDomain:
 
         # Load in the tables & lookups data   # print( self.pdgroups['Giver'])
         self.pdgroups = querytodict(tablesql % self.domain, self.pddb, 1)
-        self.pdlookups = querytodict(lookupsql % self.domain, self.pddb, 1)
+        self.pdlookups = querytodict(lookupsql % self.domain, self.pddb, 4)
         self.pdfields = querytodict(fieldsql, self.pddb, 0)
 
 
@@ -287,7 +287,7 @@ class ExplorerDomain:
 #
         renamesql="SELECT [CDF_SOURCE_FIELDNAME], [CDF_FIELDNAME] \
                     FROM   [PDSystem].[dbo].[CUST_DOMAIN_FIELD] cdf,  [PDSystem].[dbo].[CUST_DOMAIN_DATA] cdd \
-                    where cdd_cd_id="+self.domain+" and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name='"+group+"' and CDF_TYPE='DATA'"
+                    where cdd_cd_id="+self.domain+" and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name=N'"+group+"' and CDF_TYPE='DATA'"
 #
         print(' rename:',  renamesql)
         self.sqlgroups[group]['renamefields'] = querytodict(renamesql, self.pddb, 0)
@@ -341,9 +341,10 @@ class ExplorerDomain:
 
 
         for rn in self.sqlgroups[group]['renamefields']:
+
             source=self.sqlgroups[group]['renamefields'][rn]['CDF_SOURCE_FIELDNAME']
             rename=self.sqlgroups[group]['renamefields'][rn]['CDF_FIELDNAME']
-
+            print('rename ',source, rename)
             selectedfieldsql = re.sub('(,|^)('+source+')(,|$)', r'\1\2 as '+rename+r'\3', selectedfieldsql)
             selectedfieldsql = re.sub('(,|^)('+source+') as "'+source+'__pdlookup"(,|$)', r'\1\2 as "'+rename+r'"\3', selectedfieldsql)
             selectedfieldsql = re.sub('(,|^)('+source+') as "'+source+'__pdsrc"(,|$)', r'\1\2 as "'+rename+r'"\3', selectedfieldsql)
