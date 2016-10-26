@@ -1,102 +1,79 @@
 # -*- encoding: utf-8 -*-
+########################################  FROM UKPASUITE 26 Oct 2016
+## Author: Rob Simpson
+
 import os
 import pypyodbc
 import re
-import sqlite3
-import sys
 import time
 import csv
 import codecs
-
 import warnings
-
 import xml.etree.ElementTree as ET
-
 import pdsys_sql as sql  # Local file with system table SQL
 
-import configparser
+################## SETTINGS - usually configured in local.py ################
+## Domain to extract
+domain = '1007'
 
-########################################  FROM ANWB 5th Feb
-###
-###
-###   DONE suppress strings - now an option
-###
-###   DONE  xml subprocedure for main, o2o and o2m
-### DONE match key by looping through (lower)fieldnames
-###   Index query dictionaries by fieldname instead of number
-###
-###   DONE Top only xml declaration
-###   DONE write unicode xml
-###   DONE *xmlns:xsi stuff in xml namespaces
-###
-###   DONE test against non-latin1 fieldnames/groups
+## MHSystem DSN
+dsn = 'PDSystem'
 
+## OPTIONAL groups or xgroups
+## Neither returns all non-advanced groups in domain,
+## 'groups' returns those listed, 'xgroups' returns all but those listed
+# groups=TreatmentHistory
 
-###   DONE test what happens if you leave the keys as they are
-###   DONE !! pick up types from lookup fields
-###   DONE!! pass Explorer types across to metadata (don't translate)  and dbtype
-###   DONE!! Groups - all lookups are group.  Non-lookup strings are not, therefore not visible.
-###   DONE - first numeric non-key is set as Objective
+## Objective field, defaults to firt numeric non-key
+# objective=group.fieldname
+
+## Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
+## hack['all']=regex1~replace1~regex2~replace2 (...)
+## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
+
+hack = {}
+hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
+hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
+
+## Where to write data to
+data_dir = 'C:/PortraitAnalytics/data'
+#data_dir=foo
+
 
 #########  DEFAULTS
-testdb = False
 testsql = True
 replacekeys = False
-allowsources = False
-allowstrings = True
+allowsources = False ## Not used!
+allowstrings = True  ## Not used!
 write_flat_files = True
+sample = '100 percent'
 
-sample = '100 '
+#####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE ########
+##### Import any local overrides for the variables above.
+try:
+    exec(open('local.py').read())
+except IOError:
+    pass
 
-#####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN PROPERTIES FILE ########
-pe_properties = sys.argv[1]
-parser = configparser.ConfigParser()
-# Open the properties file with the correct encoding
-with codecs.open(pe_properties, 'r', encoding='utf-8') as f:
-    parser.readfp(f)
+
 
 warnings.simplefilter('error', UnicodeWarning)
 
 errors=''
 now = time.strftime("%Y%m%d-%H%M%S")
-data_dir = parser.get('pd2sql', 'data_dir')
 data_dirnow= data_dir + '\\' + now
-
-
-
-
 
 
 
 class ExplorerDomain:
     def __init__(self):
 
+        self.pddb = 'DSN=' + dsn + ';unicode_results=True;CHARSET=UTF8'
+        tablesql = sql.tablesql
+        lookupsql = sql.lookupsql
+        fieldsql = sql.fieldsql
 
-
-        if testdb:
-            from fake import fake_db
-
-
-
-
-            self.pddb = 'fakepd.db'
-            fake_db(self.pddb)
-            tablesql = 'select * from table'
-            lookupsql = 'select * from lookups'
-            self.groupnamesql = 'select cdd_name from tables'
-        else:
-            # cnxn = pyodbc.connect('DSN=pdsys2')
-            # cursor = cnxn.cursor()
-            dsn = parser.get('pd2sql', 'dsn')
-            self.pddb = 'DSN=' + dsn + ';unicode_results=True;CHARSET=UTF8'
-
-
-            tablesql = sql.tablesql
-            lookupsql = sql.lookupsql
-            fieldsql = sql.fieldsql
-
-
-            self.groupnamesql = "select cdd_name from CUST_DOMAIN_DATA where CDD_CD_ID='%s' and CDD_IS_SYSTEM_GROUP='F' and CDD_ADVANCED_USE_ONLY='F'"
+        self.groupnamesql = "select cdd_name from CUST_DOMAIN_DATA where CDD_CD_ID='%s' and CDD_IS_SYSTEM_GROUP='F' and CDD_ADVANCED_USE_ONLY='F'"
 
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
@@ -104,19 +81,14 @@ class ExplorerDomain:
         if not os.path.exists(data_dirnow):
             os.makedirs(data_dirnow)
 
-        self.domain = parser.get('pd2sql', 'domain')
+        self.domain = domain
         self._groups = None
 
-        # Get the objective from the properties file if it exists
+        # Use the objective if it exists
         try:
-            objective = parser.get('pd2sql', 'objective')
-
-            #print('Got objective...',objective)
             self.objectivegroup = objective.split('.')[0]
             self.objective = objective.split('.')[1]
             self.objectiveset = True
-            #print('Objective is', self.objectivegroup, self.objective)
-            #print('Objective is', self.objectivegroup, self.objective)
         except:
             self.objective = None
             self.objectivegroup = None
@@ -137,7 +109,6 @@ class ExplorerDomain:
         # print( 'Main fields',self.sqlgroups[self.main]['finalfields'])
         self.create_xml()
 
-
         self.write_statusfile()
 
     # list of groups to be imported
@@ -145,7 +116,7 @@ class ExplorerDomain:
         #  single list of PD groups to load
         if self._groups == None:
             try:
-                groupsin = parser.get('pd2sql', 'groups')
+                groupsin = groups
                 print("Specified groups ")
                 tmp = []
 
@@ -154,7 +125,7 @@ class ExplorerDomain:
                 self._groups = tmp
             except:
                 try:
-                    xgroups = parser.get('pd2sql', 'xgroups')
+
                     print("Excluding groups " + xgroups)
                     # Get all valid pdgroups
                     tmp = querytolist(self.groupnamesql % self.domain, self.pddb)
@@ -204,18 +175,21 @@ class ExplorerDomain:
             self.sqlgroups = {}
 
             for group in self.groups():
-                # print( 'Processing group:', group)
+                print( 'Processing group:', group)
                 self.sqlgroups[group] = {}
+
                 ## Get key for group
-                print('keys:',group, self.pdgroups[group]['cdp_paramname'],self.pdgroups[group]['cdd_key'], self.pdgroups[group]['cdd_parent_cdd_id'] )
+                #print('keys:',group, self.pdgroups[group]['cdp_paramname'],self.pdgroups[group]['cdd_key'], self.pdgroups[group]['cdd_parent_cdd_id'] )
                 # CDD_
                 if self.pdgroups[group]['cdd_parent_cdd_id'] == 'NULL' or self.pdgroups[group]['cdd_parent_cdd_id'] == None:
-                    self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_key']
+                    self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_id_source_fieldname']
+
                 elif self.pdgroups[group]['cdp_paramname'] == 'NULL' or self.pdgroups[group]['cdp_paramname'] == None:
                     #self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_key']
-                    print('KEY error on '+group)
-
+                    error('KEY error on '+group)
+                    print(errors)
                     raise
+
                 else:
                     self.sqlgroups[group]['key'] = self.pdgroups[group]['cdp_paramname']
 
@@ -223,391 +197,161 @@ class ExplorerDomain:
                 ## Replace key with mainkey if necessary, (and don't currently replace lookup source fieldnames)
                 ## and any given group.hack or all.hack
                 ## Populates: self.sqlgroups[g]['hacked']
-                self.hacksql(group)
+                self.sqlgroups[group]['hacked'] = self.hacksql(group, hack)
 
-                ## Generate lookup references for sqlgroups[group]: toplu, bottomlu, sourcefields, lookups
-                self.lookups(group)
-                # print( 'got lookups')
-                ## Build expanded SQL components
-                self.sqlgroups[group]['expanded_sql'] = 'select top ' +  sample + '  hacked.* ' \
-                                                        + '\n------- TOPLU\n'\
-                                                        + self.sqlgroups[group]['toplu'] \
-                                                        + '\n------- END TOPLU\n' \
-                                                        + ' from ( ' \
-                                                        + '\n------- HACKED\n'\
-                                                        + self.sqlgroups[group]['hacked'] \
-                                                        + '\n------- END HACKED\n'\
-                                                        + ' ) hacked  ' \
-                                                        + '\n------- BOTTOMLU\n'\
-                                                        + self.sqlgroups[group]['bottomlu']
+                newsql=self.build_sql(group,self.pddb)
+                print('NEWSQL:\n',newsql)
 
-                # Wrap in field selector
-
-                self.select_fields(group, self.pddb)
-
-
-
-                ####print( self.sqlgroups[g]['select fields sql'])
                 if testsql or write_flat_files:
-                    test_sql(self.pddb, self.sqlgroups[group]['select fields sql'], group)
+                    test_sql(self.pddb, newsql, group)
 
-
-
-                sql = self.sqlgroups[group]['select fields sql']
-                #print(sql)
                 f = open(data_dirnow + '\\' + group + '.sql', 'w', encoding="utf-8")
-                f.write(sql)
+                f.write(newsql)
                 f.close()
                 # print( 'Done group SQL')
 
         return self.sqlgroups
 
+    def build_sql(self,group,db):
+        print('Building SQL for group ',group)
 
+        pdfieldsql = sql.pdfieldsql
+        pdfields=querytodict(pdfieldsql % (self.domain , group),db, 1)
+        #print('pdfields',pdfields)
 
-    def select_fields(self, group, db):
-            # Wraps core sql query in an outer select statement,
-            # suppressing source fields and strings, renaming lookups, renaming renames!
+        topselect=''
+        hackedselect=''
+        toplu=''
+        bottomlu=''
 
-            # self.sqlgroups[group]['expandedfields'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
-            #    'expandedsizes'] \
-            #    = get_field_info(self.sqlgroups[group]['expanded_sql'], self.pddb)
+        self.sqlgroups[group]['lookups']=[]
 
-            self.sqlgroups[group]['expandedsources'], self.sqlgroups[group]['expandedrenames'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
-                'expandedsizes'] = get_pdfield_info(self, group, self.pddb)
+        for f in pdfields:
+            #print('f', pdfields[f])
 
-            selectedfields = ''
-            selectedtypes = []
-            selectedsizes = []
-            booleans = []
+            if pdfields[f]['cdf_type']=='DATA':
+                if self.sqlgroups[group]['key']==pdfields[f]['cdf_source_fieldname']:
+                    self.sqlgroups[group]['key']=pdfields[f]['cdf_fieldname']
+                hackedselect=hackedselect+pdfields[f]['cdf_source_fieldname'] + ' as ' + pdfields[f]['cdf_fieldname'] + ', '
 
-            print( 'sourcefields:',self.sqlgroups[group]['expandedsources'])
+                if pdfields[f]['cdf_advanced_use_only']=='F' or self.sqlgroups[group]['key']==pdfields[f]['cdf_fieldname']:
+                    topselect=topselect+ pdfields[f]['cdf_fieldname'] + ', '#
 
-            for i in range(len(self.sqlgroups[group]['expandedsources'])):
-                expsource = self.sqlgroups[group]['expandedsources'][i]
-                exprename = self.sqlgroups[group]['expandedrenames'][i]
-                exptype = self.sqlgroups[group]['expandedtypes'][i]
-                expsize = self.sqlgroups[group]['expandedsizes'][i]
-
-              # Potentially supress source fields, or tag __pdsrc
-                if expsource in self.sqlgroups[group]['sourcefields']:
-                    if allowsources:
-                        print('fff '+expsource + ' as ' + exprename+ '__pdsrc,')
-                        selectedfields = selectedfields + expsource + ' as ' + exprename+ '__pdsrc,'
-                        selectedtypes.append(exptype)
-                        selectedsizes.append(expsize)
-                    else:
-                        print('Excluding source field ', expsource)
-
-                 # Potentially suppress lone (non-lookup) strings
-                elif expsource=='<lookup field>':
-                 # and group+'__'+(self.sqlgroups[group]['expandedfields'][i]).lower() in self.pdfields:
-                    selectedfields = selectedfields + exprename + '__pdlookup as '+exprename+','
-                    selectedtypes.append(exptype)
-                    selectedsizes.append(expsize)
-
-                elif exptype == 'boolean':
-                    selectedfields = selectedfields + '(case when '+expsource+'=1 then 1  when '+expsource+'=0 then 0 end) as '+exprename+','
-                    selectedtypes.append('integer')
-                    selectedsizes.append(expsize)
-
-                # Potentially suppress lone (non-lookup) strings
-                elif allowstrings or exptype != "string": ##or re.match(r'.*__pdlookup', expfield):
-                    # and group+'__'+(self.sqlgroups[group]['expandedfields'][i]).lower() in self.pdfields:
-                    selectedfields = selectedfields + expsource + ' as ' + exprename + ','
-                    selectedtypes.append(exptype)
-                    selectedsizes.append(expsize)
-                else:
-                    print('Excluding non-lookup string field ', expsource)
-
-                if expsource == self.sqlgroups[group]['key']:
-                    self.sqlgroups[group]['key'] = exprename
-
-                print('Obj?', self.objectiveset, expsource, exptype, isnumeric(exptype))
-                if not (self.objectiveset) and isnumeric(exptype) and \
-                        re.search('as ' + exprename + '(,|$| )', selectedfields) and \
-                        not (exprename == self.sqlgroups[group]['key'] or exprename == self.mainkey()) \
-                        and (self.pdgroups[group]['cdd_one_to_many'] == 'F'):
-                    self.objective = exprename
+                if not (self.objectiveset) \
+                        and isnumeric(pdfields[f]['cdf_datatype']) \
+                        and pdfields[f]['cdf_advanced_use_only'] == 'F' \
+                        and self.pdgroups[group]['cdd_one_to_many'] == 'F':
+                    self.objective = pdfields[f]['cdf_fieldname']
                     self.objectivegroup = group
                     self.objectiveset = True
-                    print('Setting objective:' + self.objectivegroup, self.objective, exptype)
+                    print('Setting objective:' + self.objectivegroup, self.objective, pdfields[f]['cdf_datatype'])
 
-            selectedfields = re.sub(',$', '', selectedfields)## Trim trailing comma
-            print('s1', selectedfields)
-            selectedfieldsql=selectedfields
+            if pdfields[f]['cdf_type']=='LOOKUP':
+                topselect=topselect+pdfields[f]['cdf_fieldname'] + '__pdlookup as '+pdfields[f]['cdf_fieldname']+', '
+                self.sqlgroups[group]['lookups'].append(pdfields[f]['cdf_fieldname'])
+                lutable='lu_'+str(pdfields[f]['cdf_id'])+'_'+pdfields[f]['cdf_lookup_cdl_name']
+                toplu=toplu+', '+lutable+'.'+pdfields[f]['cdf_lookup_cdlf_fieldname']+' as '+pdfields[f]['cdf_fieldname']+ '__pdlookup''\n'
+                bottomlu=bottomlu+'left outer join ('+str(pdfields[f]['sqltext'])+') '+lutable+' on renamedhacked.'+pdfields[f]['cdf_lookup_key_cdf_fieldname']+'='+lutable+'.'+pdfields[f]['cdf_lookup_key_cdlf_fieldname']+'\n'
 
 
-####            for rn in self.sqlgroups[group]['renamefields']:
-####                print('ZZZ', self.sqlgroups[group]['renamefields'][rn])
-####                source = self.sqlgroups[group]['renamefields'][rn]['cdf_source_fieldname']
-####                rename = self.sqlgroups[group]['renamefields'][rn]['cdf_fieldname']
-####                print('rename ', source, ' as ', rename)
-####                if not (re.search('(,|^)' + source + '(,|$| )', selectedfieldsql)):
-####                    print('ERROR:', source, 'not in output field list for ', group, ' - ', selectedfieldsql)
-####                    global errors
-####                    errors = errors + '\n' + 'ERROR: ' + source + ' not in output field list ' + group + ' - ' + selectedfieldsql
-####                selectedfieldsql = re.sub('(,|^)(' + source + ')(,|$)', r'\1\2 as ' + rename + r'\3', selectedfieldsql)
-####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdlookup"(,|$)',
-####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
-####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdsrc"(,|$)',
-####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
-####
 
-####                if source == self.sqlgroups[group]['key']:
-####                    self.sqlgroups[group]['key'] = rename
-####
-####                    # print('s5', selectedfieldsql)
-####
-####                    ############ set as default objective something that exists in output
-####                for i in range(len(self.sqlgroups[group]['expandedfields'])):
-####                    expfield = self.sqlgroups[group]['expandedfields'][i]
-####                    exptype = self.sqlgroups[group]['expandedtypes'][i]
-####                    if expfield == rename:
-####                        print('Obj?', self.objectiveset, expfield, exptype, isnumeric(exptype))
-####                        if not (self.objectiveset) and isnumeric(exptype) and \
-####                                re.search('(,|^)' + source + '(,|$| )', selectedfieldsql) and \
-####                                not (expfield == self.sqlgroups[group]['key'] or expfield == self.mainkey()) \
-####                                and (self.pdgroups[group]['cdd_one_to_many'] == 'F'):
-####                            self.objective = expfield
-####                            self.objectivegroup = group
-####                            self.objectiveset = True
-####                            print('Setting objective:' + self.objectivegroup, self.objective, exptype)
+        ##  remove trailing commas
+        topselect=re.sub(", $","",topselect)
+        hackedselect = re.sub(", $", "", hackedselect)
 
-#####            selectedfieldsql = re.sub('(,|^)[^ ]+(,|$)', r'\1', selectedfieldsql) ## removes double commas?
-#####            selectedfieldsql = re.sub(',$', '', selectedfieldsql)
+        newsql1=  'select '+topselect+'\n'\
+               + 'from (select top ' +  sample + '  renamedhacked.* ' \
+               + '\n------- TOPLU\n'\
+               + toplu \
+               + '\n------- END TOPLU\n' \
+               + ' from ( ' \
+               + 'select '+hackedselect+' from ('\
+               + '\n------- HACKED\n'\
+               + self.sqlgroups[group]['hacked'] \
+               + '\n    ) hacked'\
+               + '\n------- END HACKED\n'\
+               + ' ) renamedhacked  ' \
+               + '\n------- BOTTOMLU\n'\
+               + bottomlu\
+               + ') __outer_select'
 
-            self.sqlgroups[group]['selectedtypes'] = selectedtypes
-            self.sqlgroups[group]['selectedsizes'] = selectedsizes
+        # Gets field type for final sql
+        self.sqlgroups[group]['cdffields'], self.sqlgroups[group]['cdftypes'], self.sqlgroups[group]['cdfsizes'] \
+            = get_pdfield_info(self, topselect, group, self.pddb)
 
-            # Replace irregular key with main key, if required
-            if replacekeys and self.sqlgroups[group]['key'] != self.mainkey():
-                oldkey = self.sqlgroups[group]['key']
-                print('Replacing key', oldkey)
-                selectedfieldsql = re.sub(r'(?i)(\s|,|^)' + oldkey + '(\s|,|$)',
-                                          r'\1' + oldkey + ' as ' + self.mainkey() + r'\2', selectedfieldsql, 1)
+        # Gets field type for final sql
+        self.sqlgroups[group]['odbcfields'], self.sqlgroups[group]['odbctypes'], self.sqlgroups[group]['xmltype'], self.sqlgroups[group]['odbcsizes'] \
+            = get_odbcfield_info(newsql1, group, self.pddb)
 
-                self.sqlgroups[group]['key'] = self.mainkey()
+        print(self.sqlgroups[group]['odbcfields'])
+        print(self.sqlgroups[group]['odbctypes'])
+        print(self.sqlgroups[group]['odbcsizes'])
 
-            # Select wrapper for the selected fields
-            self.sqlgroups[group]['select fields sql'] = 'select \n' + selectedfieldsql + '\nfrom (\n' + \
-                                                         (self.sqlgroups[group]['expanded_sql']) + '\n) __outer_select'
 
-            # Gets field type for final sql
-            self.sqlgroups[group]['finalfields'], self.sqlgroups[group]['finaltypes'], self.sqlgroups[group][
-                'finalsizes'] \
-                = get_field_info(self.sqlgroups[group]['select fields sql'], self.pddb)
-            # print( 'final fields', self.sqlgroups[group]['finalfields'])
+        ## Check matching field types
+        for f in range(len(self.sqlgroups[group]['odbcfields'])):
+            #print('ffff',self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdffields'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['cdftypes'][f])
+            self.sqlgroups[group]['xmltype'][f],self.sqlgroups[group]['odbcsizes'][f]=type_check(group,self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdftypes'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['odbcsizes'][f])
 
-####    def select_fieldsOrig(self, group, db):
-####            # Wraps core sql query in an outer select statement,
-####            # suppressing source fields and strings, renaming lookups, renaming renames!
-####
-####            # self.sqlgroups[group]['expandedfields'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
-####            #    'expandedsizes'] \
-####            #    = get_field_info(self.sqlgroups[group]['expanded_sql'], self.pddb)
-####
-####            self.sqlgroups[group]['expandedfields'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
-####                'expandedsizes'] = get_pdfield_info(self, group, self.pddb)
-####
-####            print('expandedfields', self.sqlgroups[group]['expandedfields'])
-####            selectedfields = ''
-####            selectedtypes = []
-####            selectedsizes = []
-####            booleans = []
-####            # print( 'sourcefields:',self.sqlgroups[group]['sourcefields'])
-####
-####            #### Build list of selected fields and types (ie. not sources for lookups, not a non-lookup string
-####            #### MAYBE (and not 'secret' fields not in domain)
-####            ##
-####            ## !!!!!!!!!!!!!!!  TO do!!
-####            ## get types from select sql, not pdfields (for ghost fields)
-####            # print( 'lookups:', self.sqlgroups[group]['lookups'])
-####
-####            self.sqlgroups[group]['renamedfields'] = {}
-####            #
-####            renamesql = "SELECT [CDF_SOURCE_FIELDNAME], [CDF_FIELDNAME] \
-####                        FROM   [PDSystem].[dbo].[CUST_DOMAIN_FIELD] cdf,  [PDSystem].[dbo].[CUST_DOMAIN_DATA] cdd \
-####                        where cdd_cd_id=" + self.domain + " and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name=N'" + group + "' and CDF_TYPE='DATA'"
-####            #
-####            self.sqlgroups[group]['renamefields'] = querytodict(renamesql, self.pddb, 0)
-####            print(self.sqlgroups[group]['renamefields'])
-####
-####            print('xxx', self.sqlgroups[group]['renamefields'])
-####            for i in range(len(self.sqlgroups[group]['expandedfields'])):
-####                expfield = self.sqlgroups[group]['expandedfields'][i]
-####                exptype = self.sqlgroups[group]['expandedtypes'][i]
-####                if exptype == "<class 'bool'>":
-####                    booleans.append(expfield)
-####                    print('bool', booleans)
-####                expsize = self.sqlgroups[group]['expandedsizes'][i]
-####                # print( 'exptype', expfield, exptype, self.objectiveset,self.sqlgroups[group]['key'],  self.mainkey())
-####                # if not (self.objectiveset) and isnumeric(exptype) and not (
-####                #                expfield == self.sqlgroups[group]['key'] or expfield == self.mainkey()):
-####                #    self.objective = expfield
-####                #    self.objectivegroup = group
-####                #    self.objectiveset = True
-####                #    print('Setting objective:' + self.objectivegroup,self.objective, exptype)
-####
-####                # Potentially supress source fields, or tag __pdsrc
-####                if expfield in self.sqlgroups[group]['sourcefields']:
-####                    if allowsources:
-####                        selectedfields = selectedfields + expfield + ' as "' + expfield + '__pdsrc",'
-####                        selectedtypes.append(exptype)
-####                        selectedsizes.append(expsize)
-####                    else:
-####                        print('Excluding source field ', expfield)
-####
-####                # Potentially suppress lone (non-lookup) strings
-####                elif allowstrings or exptype != "<class 'str'>" or re.match(r'.*__pdlookup', expfield):
-####                    # and group+'__'+(self.sqlgroups[group]['expandedfields'][i]).lower() in self.pdfields:
-####                    selectedfields = selectedfields + expfield + ','
-####                    selectedtypes.append(exptype)
-####                    selectedsizes.append(expsize)
-####                else:
-####                    print('Excluding non-lookup string field ', expfield)
-####
-####            ## Trim trailing comma
-####            selectedfields = re.sub(',$', '', selectedfields)
-####            print('s1', selectedfields)
-####
-####            ## Strip out lookups flag for final field list...
-####            # self.sqlgroups[group]['selectedfields'] = re.sub('__pdlookup', r'', selectedfields).split(',')
-####            # print('Selected fields2[]', self.sqlgroups[group]['selectedfields'])
-####
-####            ## ...but use 'blah blah as lookup__pdlookup' in actual sql
-####            selectedfieldsql = re.sub('(([^,]*)__pdlookup)', r'\1 as \2', selectedfields)
-####            ##selectedfieldsql =  selectedfields
-####
-####
-####            for rn in self.sqlgroups[group]['renamefields']:
-####                print('ZZZ', self.sqlgroups[group]['renamefields'][rn])
-####                source = self.sqlgroups[group]['renamefields'][rn]['cdf_source_fieldname']
-####                rename = self.sqlgroups[group]['renamefields'][rn]['cdf_fieldname']
-####                print('rename ', source, ' as ', rename)
-####                if not (re.search('(,|^)' + source + '(,|$| )', selectedfieldsql)):
-####                    print('ERROR:', source, 'not in output field list for ', group, ' - ', selectedfieldsql)
-####                    global errors
-####                    errors = errors + '\n' + 'ERROR: ' + source + ' not in output field list ' + group + ' - ' + selectedfieldsql
-####                selectedfieldsql = re.sub('(,|^)(' + source + ')(,|$)', r'\1\2 as ' + rename + r'\3', selectedfieldsql)
-####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdlookup"(,|$)',
-####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
-####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdsrc"(,|$)',
-####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
-####
-####                if source in booleans:
-####                    selectedfieldsql = re.sub('(,|^)(' + source + ') as', r'\1(case when \2=1 then 1 else 0 end) as',
-####                                              selectedfieldsql)
-####
-####                if source == self.sqlgroups[group]['key']:
-####                    self.sqlgroups[group]['key'] = rename
-####
-####                    # print('s5', selectedfieldsql)
-####
-####                    ############ set as default objective something that exists in output
-####                for i in range(len(self.sqlgroups[group]['expandedfields'])):
-####                    expfield = self.sqlgroups[group]['expandedfields'][i]
-####                    exptype = self.sqlgroups[group]['expandedtypes'][i]
-####                    if expfield == rename:
-####                        print('Obj?', self.objectiveset, expfield, exptype, isnumeric(exptype))
-####                        if not (self.objectiveset) and isnumeric(exptype) and \
-####                                re.search('(,|^)' + source + '(,|$| )', selectedfieldsql) and \
-####                                not (expfield == self.sqlgroups[group]['key'] or expfield == self.mainkey()) \
-####                                and (self.pdgroups[group]['cdd_one_to_many'] == 'F'):
-####                            self.objective = expfield
-####                            self.objectivegroup = group
-####                            self.objectiveset = True
-####                            print('Setting objective:' + self.objectivegroup, self.objective, exptype)
-####
-####            selectedfieldsql = re.sub('(,|^)[^ ]+(,|$)', r'\1', selectedfieldsql)
-####            selectedfieldsql = re.sub(',$', '', selectedfieldsql)
-####
-####            # print('s6', selectedfieldsql)
-####
-####            self.sqlgroups[group]['selectedtypes'] = selectedtypes
-####            self.sqlgroups[group]['selectedsizes'] = selectedsizes
-####
-####            # Replace irregular key with main key, if required
-####            if replacekeys and self.sqlgroups[group]['key'] != self.mainkey():
-####                oldkey = self.sqlgroups[group]['key']
-####                print('Replacing key', oldkey)
-####                selectedfieldsql = re.sub(r'(?i)(\s|,|^)' + oldkey + '(\s|,|$)',
-####                                          r'\1' + oldkey + ' as ' + self.mainkey() + r'\2', selectedfieldsql, 1)
-####
-####                self.sqlgroups[group]['key'] = self.mainkey()
-####            # Select wrapper for the selected fields
-####            self.sqlgroups[group]['select fields sql'] = 'select \n' + selectedfieldsql + '\nfrom (\n' + \
-####                                                         (self.sqlgroups[group]['expanded_sql']) + '\n) __outer_select'
-####
-####            # Gets field type for final sql
-####            self.sqlgroups[group]['finalfields'], self.sqlgroups[group]['finaltypes'], self.sqlgroups[group][
-####                'finalsizes'] \
-####                = get_field_info(self.sqlgroups[group]['select fields sql'], self.pddb)
-            # print( 'final fields', self.sqlgroups[group]['finalfields'])
+            if self.sqlgroups[group]['xmltype'][f] == 'boolean':
+                print('BOOL')
+                print(topselect)
+                topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + ')(,|$)',
+                                      r"(case when \1='F' then 0 when \1='T' then 1 end) as \1\2",
+                                   topselect)
+#                print(hackedselect)
+#                hackedselect = re.sub('(,|^) (' + pdfields[f]['cdf_source_fieldname'] + ') as',
+#                                      r'\1(case when \2=\'F\' then 0 when \2=\'T\' then 1 end) as',
+#                                      hackedselect)
+                print(topselect)
 
-    def hacksql(self, group):
+        newsql2 = 'select ' + topselect + '\n' \
+                  + 'from (select top ' + sample + '  renamedhacked.* ' \
+                  + '\n------- TOPLU\n' \
+                  + toplu \
+                  + '\n------- END TOPLU\n' \
+                  + ' from ( ' \
+                  + 'select ' + hackedselect + ' from (' \
+                  + '\n------- HACKED\n' \
+                  + self.sqlgroups[group]['hacked'] \
+                  + '\n    ) hacked' \
+                  + '\n------- END HACKED\n' \
+                  + ' ) renamedhacked  ' \
+                  + '\n------- BOTTOMLU\n' \
+                  + bottomlu \
+                  + ') __outer_select'
+        #print(self.sqlgroups[group]['cdffields'])
+        #print(self.sqlgroups[group]['cdftypes'])
+        #print(self.sqlgroups[group]['cdfsizes'])
+
+        return newsql2
+
+    def hacksql(self, group, hack):
         # concatenate the 2 sql fields (to get round 4000 character limit)
-        self.sqlgroups[group]['hacked'] = self.pdgroups[group]['ss_sql_text1'] + self.pdgroups[group]['ss_sql_text2']
+        sql = self.pdgroups[group]['ss_sql_text1'] + self.pdgroups[group]['ss_sql_text2']
 
-        # Build tilde-separated hack list from all.hack + group.hack
-        # hack= regex1,sub1,regex2,sub2 ...
-        try:
-            allhack = parser.get('pd2sql', '.hack')
-        except:
+        # Build tilde-separated hack list from hack['all'] + hack['groupname']
+        # hack= regex1~sub1~regex2~sub2 ...
+        if 'all' in hack:
+            allhack = hack['all']
+        else:
             allhack = 'dummy~dummy'
 
-        try:
-            hack = allhack + '~' + parser.get('pd2sql', group + '.hack')
-        except:
+        if group in hack:
+            hack = allhack + '~' + hack[group]
+        else:
             hack = allhack
 
         # Execute hack replacements
         hacklist = hack.split('~')
 
         for x in range(0, int(len(hacklist) / 2)):
-            self.sqlgroups[group]['hacked'] = re.sub(r'' + hacklist[x * 2], r'' + hacklist[x * 2 + 1],
-                                                     self.sqlgroups[group]['hacked'])
+            sql = re.sub(r'' + hacklist[x * 2], r'' + hacklist[x * 2 + 1], sql)
+            print('HACK', hacklist[x * 2], hacklist[x * 2 + 1])
             # For testing ~ | replacement only, only way to get a tilde into the data by hacking, as it is the hack separator!
             #self.sqlgroups[group]['hacked'] = re.sub(r'€', r'~',self.sqlgroups[group]['hacked'])
 
-
-    def lookups(self, group):
-
-        self.sqlgroups[group]['sourcefields'] = []
-        self.sqlgroups[group]['lookups'] = []
-        self.sqlgroups[group]['toplu'] = ''
-        self.sqlgroups[group]['bottomlu'] = ''
-
-        for l in self.pdlookups:
-            print('LOOKUP', self.pdlookups[l]['cdd_name'], self.pdlookups[l]['cdf_fieldname'])
-            if self.pdlookups[l]['cdd_name'] == group:
-
-                source = self.pdlookups[l]['cdf_fieldname']
-                lookup = self.pdlookups[l]['cdf_lookup_cdlf_fieldname']
-
-                self.sqlgroups[group]['sourcefields'].append(self.pdlookups[l]['sourcefield'])  # .lower())
-                self.sqlgroups[group]['lookups'].append(source)
-                tmp_table = 'lu_' + str(self.pdlookups[l]['cdl_sd_id']) + '_'+ str(self.pdlookups[l]['cdf_id']) + '_'     + self.pdlookups[l]['sourcefield'] + '_'   + lookup
-
-                #### top pattern looks like:
-                #####                     , lu_pc_reg_id_2113_lu_desc.[lu_desc] as "Region"
-                self.sqlgroups[group]['toplu'] = self.sqlgroups[group]['toplu'] + '\n, ' + tmp_table  + '.[' + lookup + ']  as "' + source + '__pdlookup"\n'
-                #self.sqlgroups[group]['toplu'] = self.sqlgroups[group]['toplu'] + '\n, ' + tmp_table  + '.[' + lookup + ']  as "' + source + '"\n'
-
-                # Where there is a lookup, copy the field data scross from source to final fieldname
-                group_field = group + '__' + (source).lower()
-                self.pdfields[group_field] = self.pdfields[group + '__' + (self.pdlookups[l]['sourcefield']).lower()] ##HERE123
-                #### bottom pattern looks like:
-                ####            left outer join ( SELECT DISTINCT ROLLENR as id,  cast(ROLLENR as varchar) as descr   FROM [SOSData].[dbo].[ABONNEMENT]
-                ####            ) lu_2524_ROLLENR_descr
-                ####            on orig.[ROLLENR] = lu_2524_ROLLENR_descr.[id]
-                self.sqlgroups[group]['bottomlu'] = self.sqlgroups[group]['bottomlu'] + '\nleft outer join (' + \
-                                                    self.pdlookups[l]['ss_sql_text1'] + self.pdlookups[l][
-                                                        'ss_sql_text2'] + ') ' \
-                                                    + tmp_table + '\n   on hacked.' + self.pdlookups[l]['sourcefield'] \
-                                                    + ' = ' \
-                                                    + tmp_table + '.[' + self.pdlookups[l][
-                                                        'cdf_lookup_key_cdlf_fieldname'] + ']'
-                # print 'Got lookups',self.sqlgroups[group]['lookups']
+        return sql
 
 
     def create_xml(self):
@@ -618,6 +362,7 @@ class ExplorerDomain:
         # xml_topdataobjects = ET.SubElement(root, 'dataobjects', xsi="http://www.w3.org/2001/XMLSchema-instance",
         #                                xsd="http://www.w3.org/2001/XMLSchema",
         #                                xmlns="http://services.analytics.portrait.pb.com/")
+
         dataobject = self.write_group_xml(root, 'dataobject', [self.main],'main')
 
         xml_dataobjects = ET.SubElement(dataobject, 'dataobjects')
@@ -650,30 +395,28 @@ class ExplorerDomain:
 
             xml_fields_g = ET.SubElement(xml_object, 'fields')
 
-            for f in range(len(self.sqlgroups[group]['finalfields'])):
+            for f in range(len(self.sqlgroups[group]['odbcfields'])):
 
-
-
-                group_field = group + '__' + re.sub('__pdsrc', '', self.sqlgroups[group]['finalfields'][f].lower())
+                group_field = group + '__' + re.sub('__pdsrc', '', self.sqlgroups[group]['odbcfields'][f].lower())
                 try:
 
-                    sourcename = self.sqlgroups[group]['finalfields'][f]
-                    fieldname = self.sqlgroups[group]['finalfields'][f]
+                    sourcename = self.sqlgroups[group]['odbcfields'][f]
+                    fieldname = self.sqlgroups[group]['odbcfields'][f]
                     description = str(self.pdfields[group_field]['description'])
                 except:
 
-                    sourcename = self.sqlgroups[group]['finalfields'][f]
-                    fieldname = self.sqlgroups[group]['finalfields'][f]
+                    sourcename = self.sqlgroups[group]['odbcfields'][f]
+                    fieldname = self.sqlgroups[group]['odbcfields'][f]
                     description = ''
 
 
-                #sourcename = self.sqlgroups[group]['finalfields'][f]
-                #fieldname = self.sqlgroups[group]['finalfields'][f]
-                explorertype = explorer_type(self.sqlgroups[group]['finaltypes'][f])
-                explorersize = explorer_size(self.sqlgroups[group]['finalsizes'][f])
+                #sourcename = self.sqlgroups[group]['odbcfields'][f]
+                #fieldname = self.sqlgroups[group]['odbcfields'][f]
+                explorertype = self.sqlgroups[group]['xmltype'][f]
+                explorersize = explorer_size(self.sqlgroups[group]['odbcsizes'][f])
 
 
-                #print('field:',group_field,sourcename,fieldname,self.sqlgroups[group]['finalfields'][f])
+                #print('field:',group_field,sourcename,fieldname,self.sqlgroups[group]['odbcfields'][f])
                 xml_field = ET.SubElement(xml_fields_g, 'field', columnname=sourcename, type=explorertype,
                                           name=fieldname)
 
@@ -687,8 +430,8 @@ class ExplorerDomain:
                     xml_field.set('pdlength', explorersize)
 
                 # Flag sources and objective
-                if re.match('.*__pdsrc', sourcename):
-                    xml_field.set('pdsource', 'true')
+                #if re.match('.*__pdsrc', sourcename):
+                #    xml_field.set('pdsource', 'true')
                 if sourcename == self.objective and group == self.objectivegroup:
                     xml_field.set('objective', 'true')
 
@@ -711,24 +454,6 @@ class ExplorerDomain:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # domain=1003
-
-
-
 def explorer_size(size):
     if int(size) > 9999:
         ConvertedSize=None
@@ -737,79 +462,105 @@ def explorer_size(size):
 
     return ConvertedSize
 
-def explorer_type(type):
-    if type == "<class 'int'>":
-        ConvertedType = 'integer'
-    elif type == "<class 'unicode'>":
-        ConvertedType = 'string'
-    elif type == "<class 'str'>":
-        ConvertedType = 'string'
-    elif type == "<class 'datetime.datetime'>":
-        ConvertedType = 'datetime'
 
-    elif type == "<class 'float'>":
-        ConvertedType = 'float'
-    elif type == "<class 'decimal.Decimal'>":
-        ConvertedType = 'float'
-    elif type == "<class 'long'>":
-        ConvertedType = 'integer'
-    elif type == "<class 'bool'>":
-        ConvertedType = 'boolean'
-    elif type == "<class 'bytearray'>":
-        ConvertedType = 'integer'
+def error(text):
+
+    print('ERROR:', text)
+    global errors
+    errors = errors + '\n' + 'ERROR: ' + text
+
+def type_check(group,field,pdtype,odbctype,odbcsize):
+    print('GFPO', group,field,pdtype,odbctype)
+    if pdtype in ['string','integer','float','datetime','boolean']:
+        normalisedpdtype = pdtype
+    elif pdtype == "int64":
+        normalisedpdtype = 'integer'
+        error('Warning: Int64 pdtype for field'+field+' in group '+group)
+    elif pdtype == "date":
+        normalisedpdtype = 'datetime'
     else:
-        ConvertedType = type
+        error('Error: Unknown pdtype for field'+field+' in group '+group+':'+pdtype)
+
+    if odbctype == "<class 'str'>":
+        normalisedodbctype = 'string'
+    elif odbctype == "<class 'datetime.datetime'>":
+        normalisedodbctype = 'datetime'
+    elif odbctype == "<class 'float'>":
+        normalisedodbctype = 'float'
+    elif odbctype == "<class 'int'>":
+        normalisedodbctype = 'integer'
+    elif odbctype == "<class 'decimal.Decimal'>":
+        normalisedodbctype = 'float'
+    elif odbctype == "<class 'long'>":
+        normalisedodbctype = 'integer'
+    elif odbctype == "<class 'bool'>":
+        normalisedodbctype = 'boolean'
+    else:
+        error('Error: Unknown odbctype for field'+field+' in group '+group+':'+odbctype)
+
+    xmltype=normalisedodbctype
+    xmllength=odbcsize
 
 
-    return ConvertedType
+    if normalisedpdtype=='boolean':
+        if normalisedodbctype == 'string': # This is correct
+            # Boolean in PD is 'T' / 'F' in the data, Explorer needs to be told it is a Boolean, (and data needs to be converted to 1/0 in text file)
+            error('Not error: Boolean&string for field ' + field + ' in group ' + group + ': ' + normalisedpdtype + ', ' + normalisedodbctype + ' - declaring xmltype as Boolean')
+            xmltype = 'boolean'
 
+        elif normalisedodbctype == 'boolean':
+            # In this case we don't want to pass boolean to Explorer, because we are passing a string
+            error('Warning: Boolean datatype converted to integer for ' + field + ' in group ' + group + ': ' + normalisedpdtype + ', ' + normalisedodbctype+'PD Boolean must be string with values T,F')
+            # Below will ensure data will load.  PYPYODBC writes ('False','True')
+            xmltype = 'string'
+            print('xmllength',xmllength)
+            xmllength = '5'
+
+    if xmltype!=normalisedpdtype:
+        error('Error: Type mismatch for field '+field+' in group '+group+': '+normalisedpdtype+', '+normalisedodbctype+' turned to '+xmltype)
+
+
+    return xmltype, xmllength
 
 
 def isnumeric(pytype):
     numerics = ['integer','float']
     return (pytype in numerics)
 
-def get_pdfield_info(self,group,db):
+def get_pdfield_info(self,select,group,db):
     pdfieldsql = "SELECT cdf_order_index, cdf_source_fieldname, cdf_fieldname ,  concat([CDF_SOURCE_FIELDNAME], ' as ', [CDF_FIELDNAME]) as rename, cdf_datatype, cdf_size \
                 FROM   [PDSystem].[dbo].[CUST_DOMAIN_FIELD] cdf,  [PDSystem].[dbo].[CUST_DOMAIN_DATA] cdd \
                 where cdd_cd_id=" + self.domain + " and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name=N'" + group + "'  order by cdf_order_index "
-    pdf=querytodict(pdfieldsql,db,0)
+    pdf=querytodict(pdfieldsql,db,2)
     sourcelist = []
     renamelist = []
     typelist = []
     sizelist = []
-    for i in (pdf):
-        print('PDF',pdf[i])
-        sourcelist.append(pdf[i]['cdf_source_fieldname'])
-        renamelist.append(pdf[i]['cdf_fieldname'])
-        typelist.append(pdf[i]['cdf_datatype'])
-        sizelist.append(pdf[i]['cdf_size'])
-        #sizelist.append(str(datasizes[i]))
 
-    return (sourcelist, renamelist, typelist, sizelist)
+    select=re.sub("[^, ]* as *","",select)
+    select=re.sub(" ","",select)
+    print(select)
+    for f in select.split(','):
+        print('Field:',f,pdf[f]['cdf_fieldname'],pdf[f]['cdf_datatype'],pdf[f]['cdf_size'])
+        sourcelist.append(pdf[f]['cdf_fieldname'])
+        typelist.append(pdf[f]['cdf_datatype'])
+        sizelist.append(pdf[f]['cdf_size'])
+    return (sourcelist, typelist, sizelist)
 
-def get_field_info(sql, db):
+def get_odbcfield_info(sql, group, db):
     pypyodbc.lowercase = False
 
-    if testdb:
-        connection = sqlite3.connect(db)
-
-    else:
-        connection = pypyodbc.connect(db)
-
+    connection = pypyodbc.connect(db)
     cur = connection.cursor()
 
     try:
-
         print(sql)
-
         x = cur.execute(sql)
     except:
-
         print('#######################################################################')
         print(sql)
-        print('SQL error in get_field_info')
-
+        error('SQL error in get_field_info for group '+group)
+        print(errors)
         raise
 
     connection.close()
@@ -819,21 +570,18 @@ def get_field_info(sql, db):
 
     fieldlist = []
     typelist = []
+    xmltypelist = []
     sizelist = []
     for i in range(len(fields)):
         fieldlist.append(fields[i])
         typelist.append(str(datatypes[i]))
+        xmltypelist.append(str(datatypes[i]))
         sizelist.append(str(datasizes[i]))
-    return (fieldlist, typelist, sizelist)
+    return (fieldlist, typelist, xmltypelist, sizelist)
 
 
 def querytolist(sql, db):
-    if testdb:
-        connection = sqlite3.connect(db)
-
-        connection.row_factory = sqlite3.Row
-    else:
-        connection = pypyodbc.connect(db)
+    connection = pypyodbc.connect(db)
 
     x = connection.cursor().execute(sql)
     # x = connection.execute(sql)
@@ -851,22 +599,17 @@ def querytodict(sql, db, n):
     ## Takes a sql query and turns result into dict of dictionarys, keyed on nth column:
     #        d[key value][field], eg. d['rob']['home'] -> hove
     #print('DB is:', db)
-    if testdb:
-        connection = sqlite3.connect(db)
-
-    else:
-        print('DB',db)
-        connection = pypyodbc.connect(db)
+    connection = pypyodbc.connect(db)
 
     cursor = connection.cursor()
     # cur.execute("set character_set_results = 'latin1'")
     try:
         x = cursor.execute(sql)
-
     except:
         print('#######################################################################')
         print(sql)
-        print('SQL error in query to dict:')
+        error('SQL error in query to dict:')
+        print(errors)
         raise
 
     rows = x.fetchall()
@@ -902,7 +645,8 @@ def test_sql(db, sql, name):
 
         print('#######################################################################')
         print(sql)
-        print('SQL error in test SQL:')
+        error('SQL error in test SQL:')
+        print(errors)
         raise
 
     if write_flat_files:
@@ -917,52 +661,12 @@ def test_sql(db, sql, name):
             os.makedirs(data_dirnow + '\\' + name + '_wrap')
         with open(data_dirnow + '\\' + name + '_wrap\\export.txt', 'w', encoding='utf-8') as f:
 
-            ## FASTEST option, spew out CSV irrespective of delimiters ...
-            #    UnicodeWriter(f, quoting=csv.QUOTE_MINIMAL, lineterminator="\n", escapechar='\\', quotechar='~',
-             #                     delimiter='|' ).writerows(cursor)
-            #with open('eggs.csv', 'w', newline='') as csvfile:
             csv.writer(f, quoting=csv.QUOTE_MINIMAL, lineterminator="\n", escapechar='\\', quotechar='"', delimiter=',').writerows(cursor)
-
-
-            ## ... or SAFEST option, double up quoutes and delimiters in data
-            #writer = csv.writer(f, quoting=csv.QUOTE_ALL, delimiter=str("|"), quotechar=str("~"))
-            #for row in cur:
-            #    writer.writerow(map(quote, row))
 
     connection.close()
 
 
 
-
-
-def ExplorerXmlGroups(xml):
-    # TODO check for unicode group names
-    # ET is from: import xml.etree.ElementTree as ET
-    tree = ET.parse(xml)
-    namespace = '{http://services.analytics.portrait.pb.com/}'
-
-    # Get Main group
-    x = tree.find(namespace + 'dataobject')
-    main = x.attrib['tablename']
-
-    # Get one-to-ones
-    onetoone = []
-    x = tree.find(namespace + 'dataobject/' + namespace + 'dataobjects')
-    for i in x:
-        onetoone.append(i.attrib['tablename'])
-
-    # Get one-to-manys
-    onetomany = []
-    x = tree.find(namespace + 'dataobject/' + namespace + 'dataobjectcollections')
-    for i in x:
-        onetomany.append(i.attrib['tablename'])
-
-    return main, onetoone, onetomany
-
-
-
-##########################################################################################################
-##########################################################################################################
 
 
 def main():
@@ -973,21 +677,9 @@ def main():
     end = time.strftime("%Y%m%d-%H%M%S")
     print('start',now)
     print('end  ',end)
-#    sys.exit(sqldirnow)
-
-# a,b,c=ExplorerXmlGroups('C:\\Users\\PBDIA00022\\PycharmProjects\\PD2SQL\\test\\cheese\\ADSmetadata.xml')
-# print( 'a:',a)
-# print( 'b:',b)
-# print( 'c:',c)
-
-# print( pe.groups())
-# print( pe.main)
-# pe.group_sql()
-# print( pe.group_sql()['Giver']['sql'])
 
 main()
 
 print('Nearly Done!!')
-
-print('Done!!')
 print(errors)
+print('Done!!')
