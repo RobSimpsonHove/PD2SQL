@@ -16,7 +16,7 @@ import pdsys_sql as sql  # Local file with system table SQL
 
 import configparser
 
-########################################  FROM ANWB 5th Feb
+########################################  FROM UKPASUITE 26 Oct 2016
 ###
 ###
 ###   DONE suppress strings - now an option
