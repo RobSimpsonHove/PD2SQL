@@ -1,98 +1,79 @@
 # -*- encoding: utf-8 -*-
+########################################  FROM UKPASUITE 26 Oct 2016
+## Author: Rob Simpson
+
 import os
 import pypyodbc
 import re
-import sqlite3
-import sys
 import time
 import csv
 import codecs
-
 import warnings
-
 import xml.etree.ElementTree as ET
-
 import pdsys_sql as sql  # Local file with system table SQL
 
-import configparser
+################## SETTINGS - usually configured in local.py ################
+## Domain to extract
+domain = '1007'
 
-########################################  FROM UKPASUITE 26 Oct 2016
-###
-###
-###   DONE suppress strings - now an option
-###
-###   DONE  xml subprocedure for main, o2o and o2m
-### DONE match key by looping through (lower)fieldnames
-###   Index query dictionaries by fieldname instead of number
-###
-###   DONE Top only xml declaration
-###   DONE write unicode xml
-###   DONE *xmlns:xsi stuff in xml namespaces
-###
-###   DONE test against non-latin1 fieldnames/groups
+## MHSystem DSN
+dsn = 'PDSystem'
 
+## OPTIONAL groups or xgroups
+## Neither returns all non-advanced groups in domain,
+## 'groups' returns those listed, 'xgroups' returns all but those listed
+# groups=TreatmentHistory
 
-###   DONE test what happens if you leave the keys as they are
-###   DONE !! pick up types from lookup fields
-###   DONE!! pass Explorer types across to metadata (don't translate)  and dbtype
-###   DONE!! Groups - all lookups are group.  Non-lookup strings are not, therefore not visible.
-###   DONE - first numeric non-key is set as Objective
+## Objective field, defaults to firt numeric non-key
+# objective=group.fieldname
+
+## Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
+## hack['all']=regex1~replace1~regex2~replace2 (...)
+## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
+
+hack = {}
+hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
+hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
+
+## Where to write data to
+data_dir = 'C:/PortraitAnalytics/data'
+#data_dir=foo
+
 
 #########  DEFAULTS
-testdb = False
 testsql = True
 replacekeys = False
 allowsources = False ## Not used!
 allowstrings = True  ## Not used!
 write_flat_files = True
+sample = '100 percent'
 
-sample = '100 '
+#####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE ########
+##### Import any local overrides for the variables above.
+try:
+    exec(open('local.py').read())
+except IOError:
+    pass
 
-#####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN PROPERTIES FILE ########
-pe_properties = sys.argv[1]
-parser = configparser.ConfigParser()
-# Open the properties file with the correct encoding
-with codecs.open(pe_properties, 'r', encoding='utf-8') as f:
-    parser.readfp(f)
+
 
 warnings.simplefilter('error', UnicodeWarning)
 
 errors=''
 now = time.strftime("%Y%m%d-%H%M%S")
-data_dir = parser.get('pd2sql', 'data_dir')
 data_dirnow= data_dir + '\\' + now
-
-
-
-
 
 
 
 class ExplorerDomain:
     def __init__(self):
 
+        self.pddb = 'DSN=' + dsn + ';unicode_results=True;CHARSET=UTF8'
+        tablesql = sql.tablesql
+        lookupsql = sql.lookupsql
+        fieldsql = sql.fieldsql
 
-
-        if testdb:
-            from fake import fake_db
-            self.pddb = 'fakepd.db'
-            fake_db(self.pddb)
-            tablesql = 'select * from table'
-            lookupsql = 'select * from lookups'
-            self.groupnamesql = 'select cdd_name from tables'
-        else:
-            # cnxn = pyodbc.connect('DSN=pdsys2')
-            # cursor = cnxn.cursor()
-            dsn = parser.get('pd2sql', 'dsn')
-            self.pddb = 'DSN=' + dsn + ';unicode_results=True;CHARSET=UTF8'
-
-
-            tablesql = sql.tablesql
-            lookupsql = sql.lookupsql
-            fieldsql = sql.fieldsql
-
-
-            self.groupnamesql = "select cdd_name from CUST_DOMAIN_DATA where CDD_CD_ID='%s' and CDD_IS_SYSTEM_GROUP='F' and CDD_ADVANCED_USE_ONLY='F'"
+        self.groupnamesql = "select cdd_name from CUST_DOMAIN_DATA where CDD_CD_ID='%s' and CDD_IS_SYSTEM_GROUP='F' and CDD_ADVANCED_USE_ONLY='F'"
 
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
@@ -100,19 +81,14 @@ class ExplorerDomain:
         if not os.path.exists(data_dirnow):
             os.makedirs(data_dirnow)
 
-        self.domain = parser.get('pd2sql', 'domain')
+        self.domain = domain
         self._groups = None
 
-        # Get the objective from the properties file if it exists
+        # Use the objective if it exists
         try:
-            objective = parser.get('pd2sql', 'objective')
-
-            #print('Got objective...',objective)
             self.objectivegroup = objective.split('.')[0]
             self.objective = objective.split('.')[1]
             self.objectiveset = True
-            #print('Objective is', self.objectivegroup, self.objective)
-            #print('Objective is', self.objectivegroup, self.objective)
         except:
             self.objective = None
             self.objectivegroup = None
@@ -140,7 +116,7 @@ class ExplorerDomain:
         #  single list of PD groups to load
         if self._groups == None:
             try:
-                groupsin = parser.get('pd2sql', 'groups')
+                groupsin = groups
                 print("Specified groups ")
                 tmp = []
 
@@ -149,7 +125,7 @@ class ExplorerDomain:
                 self._groups = tmp
             except:
                 try:
-                    xgroups = parser.get('pd2sql', 'xgroups')
+
                     print("Excluding groups " + xgroups)
                     # Get all valid pdgroups
                     tmp = querytolist(self.groupnamesql % self.domain, self.pddb)
@@ -221,7 +197,7 @@ class ExplorerDomain:
                 ## Replace key with mainkey if necessary, (and don't currently replace lookup source fieldnames)
                 ## and any given group.hack or all.hack
                 ## Populates: self.sqlgroups[g]['hacked']
-                self.sqlgroups[group]['hacked']=self.hacksql(group)
+                self.sqlgroups[group]['hacked'] = self.hacksql(group, hack)
 
                 newsql=self.build_sql(group,self.pddb)
                 print('NEWSQL:\n',newsql)
@@ -350,22 +326,20 @@ class ExplorerDomain:
 
         return newsql2
 
-
-
-    def hacksql(self, group):
+    def hacksql(self, group, hack):
         # concatenate the 2 sql fields (to get round 4000 character limit)
         sql = self.pdgroups[group]['ss_sql_text1'] + self.pdgroups[group]['ss_sql_text2']
 
-        # Build tilde-separated hack list from all.hack + group.hack
+        # Build tilde-separated hack list from hack['all'] + hack['groupname']
         # hack= regex1~sub1~regex2~sub2 ...
-        try:
-            allhack = parser.get('pd2sql', '.hack')
-        except:
+        if 'all' in hack:
+            allhack = hack['all']
+        else:
             allhack = 'dummy~dummy'
 
-        try:
-            hack = allhack + '~' + parser.get('pd2sql', group + '.hack')
-        except:
+        if group in hack:
+            hack = allhack + '~' + hack[group]
+        else:
             hack = allhack
 
         # Execute hack replacements
@@ -373,6 +347,7 @@ class ExplorerDomain:
 
         for x in range(0, int(len(hacklist) / 2)):
             sql = re.sub(r'' + hacklist[x * 2], r'' + hacklist[x * 2 + 1], sql)
+            print('HACK', hacklist[x * 2], hacklist[x * 2 + 1])
             # For testing ~ | replacement only, only way to get a tilde into the data by hacking, as it is the hack separator!
             #self.sqlgroups[group]['hacked'] = re.sub(r'€', r'~',self.sqlgroups[group]['hacked'])
 
@@ -575,11 +550,9 @@ def get_pdfield_info(self,select,group,db):
 def get_odbcfield_info(sql, group, db):
     pypyodbc.lowercase = False
 
-    if testdb:
-        connection = sqlite3.connect(db)
-    else:
-        connection = pypyodbc.connect(db)
+    connection = pypyodbc.connect(db)
     cur = connection.cursor()
+
     try:
         print(sql)
         x = cur.execute(sql)
@@ -608,12 +581,7 @@ def get_odbcfield_info(sql, group, db):
 
 
 def querytolist(sql, db):
-    if testdb:
-        connection = sqlite3.connect(db)
-
-        connection.row_factory = sqlite3.Row
-    else:
-        connection = pypyodbc.connect(db)
+    connection = pypyodbc.connect(db)
 
     x = connection.cursor().execute(sql)
     # x = connection.execute(sql)
@@ -631,18 +599,12 @@ def querytodict(sql, db, n):
     ## Takes a sql query and turns result into dict of dictionarys, keyed on nth column:
     #        d[key value][field], eg. d['rob']['home'] -> hove
     #print('DB is:', db)
-    if testdb:
-        connection = sqlite3.connect(db)
-
-    else:
-        #print('DB',db)
-        connection = pypyodbc.connect(db)
+    connection = pypyodbc.connect(db)
 
     cursor = connection.cursor()
     # cur.execute("set character_set_results = 'latin1'")
     try:
         x = cursor.execute(sql)
-
     except:
         print('#######################################################################')
         print(sql)
