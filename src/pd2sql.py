@@ -42,13 +42,11 @@ import configparser
 testdb = False
 testsql = True
 replacekeys = False
-allowsources = True
+allowsources = False
 allowstrings = True
 write_flat_files = True
 
-samplesize = 100
-#sample = ''
-sample = 'percent'
+sample = '100 '
 
 #####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN PROPERTIES FILE ########
 pe_properties = sys.argv[1]
@@ -59,7 +57,7 @@ with codecs.open(pe_properties, 'r', encoding='utf-8') as f:
 
 warnings.simplefilter('error', UnicodeWarning)
 
-
+errors=''
 now = time.strftime("%Y%m%d-%H%M%S")
 data_dir = parser.get('pd2sql', 'data_dir')
 data_dirnow= data_dir + '\\' + now
@@ -126,9 +124,9 @@ class ExplorerDomain:
 
         # Load in the tables & lookups data   # print( self.pdgroups['Giver'])
         self.pdgroups = querytodict(tablesql % self.domain, self.pddb, 1)
-        self.pdlookups = querytodict(lookupsql % self.domain, self.pddb, 4)
+        self.pdlookups = querytodict(lookupsql % self.domain, self.pddb, 2)
         self.pdfields = querytodict(fieldsql, self.pddb, 0)
-
+        print('LENGTH',len(self.pdlookups))
 
         # Identify the main, onetoone, onetomany groups
         self.make_group_lists()
@@ -216,6 +214,7 @@ class ExplorerDomain:
                 elif self.pdgroups[group]['cdp_paramname'] == 'NULL' or self.pdgroups[group]['cdp_paramname'] == None:
                     #self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_key']
                     print('KEY error on '+group)
+
                     raise
                 else:
                     self.sqlgroups[group]['key'] = self.pdgroups[group]['cdp_paramname']
@@ -230,7 +229,7 @@ class ExplorerDomain:
                 self.lookups(group)
                 # print( 'got lookups')
                 ## Build expanded SQL components
-                self.sqlgroups[group]['expanded_sql'] = 'select top ' + str(samplesize) + ' ' + sample + '  hacked.* ' \
+                self.sqlgroups[group]['expanded_sql'] = 'select top ' +  sample + '  hacked.* ' \
                                                         + '\n------- TOPLU\n'\
                                                         + self.sqlgroups[group]['toplu'] \
                                                         + '\n------- END TOPLU\n' \
@@ -263,124 +262,287 @@ class ExplorerDomain:
 
         return self.sqlgroups
 
+
+
     def select_fields(self, group, db):
-        # Wraps core sql query in an outer select statement,
-        # suppressing source fields and strings, renaming lookups, renaming renames!
-        self.sqlgroups[group]['expandedfields'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
-            'expandedsizes'] \
-            = get_field_info(self.sqlgroups[group]['expanded_sql'], self.pddb)
-        print( 'expandedfields', self.sqlgroups[group]['expandedfields'])
-        selectedfields = ''
-        selectedtypes = []
-        selectedsizes = []
-        booleans = []
-        # print( 'sourcefields:',self.sqlgroups[group]['sourcefields'])
+            # Wraps core sql query in an outer select statement,
+            # suppressing source fields and strings, renaming lookups, renaming renames!
 
-        #### Build list of selected fields and types (ie. not sources for lookups, not a non-lookup string
-        #### MAYBE (and not 'secret' fields not in domain)
-        ##
-        ## !!!!!!!!!!!!!!!  TO do!!
-        ## get types from select sql, not pdfields (for ghost fields)
-        # print( 'lookups:', self.sqlgroups[group]['lookups'])
+            # self.sqlgroups[group]['expandedfields'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
+            #    'expandedsizes'] \
+            #    = get_field_info(self.sqlgroups[group]['expanded_sql'], self.pddb)
 
-        self.sqlgroups[group]['renamedfields']={}
-#
-        renamesql="SELECT [CDF_SOURCE_FIELDNAME], [CDF_FIELDNAME] \
-                    FROM   [PDSystem].[dbo].[CUST_DOMAIN_FIELD] cdf,  [PDSystem].[dbo].[CUST_DOMAIN_DATA] cdd \
-                    where cdd_cd_id="+self.domain+" and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name=N'"+group+"' and CDF_TYPE='DATA'"
-#
-        print(' rename:',  renamesql)
-        self.sqlgroups[group]['renamefields'] = querytodict(renamesql, self.pddb, 0)
-        print(self.sqlgroups[group]['renamefields'])
+            self.sqlgroups[group]['expandedsources'], self.sqlgroups[group]['expandedrenames'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
+                'expandedsizes'] = get_pdfield_info(self, group, self.pddb)
 
-        print('xxx',self.sqlgroups[group]['renamefields'])
-        for i in range(len(self.sqlgroups[group]['expandedfields'])):
-            expfield = self.sqlgroups[group]['expandedfields'][i]
-            exptype = self.sqlgroups[group]['expandedtypes'][i]
-            if exptype=="<class 'bool'>":
-                booleans.append(expfield)
-                print('bool',booleans)
-            expsize = self.sqlgroups[group]['expandedsizes'][i]
-            print( 'exptype', expfield, exptype, self.objective, self.objectiveset,self.sqlgroups[group]['key'],  self.mainkey())
-            if not (self.objectiveset) and isnumeric(exptype) and not (
-                            expfield == self.sqlgroups[group]['key'] or expfield == self.mainkey()):
-                self.objective = expfield
-                self.objectivegroup = group
-                self.objectiveset = True
-                print('Setting objective:' + self.objective, exptype)
+            selectedfields = ''
+            selectedtypes = []
+            selectedsizes = []
+            booleans = []
 
-            # Potentially supress source fields, or tag __pdsrc
-            if expfield in self.sqlgroups[group]['sourcefields']:
-                if allowsources:
-                    selectedfields = selectedfields + expfield + ' as "' + expfield + '__pdsrc",'
+            print( 'sourcefields:',self.sqlgroups[group]['expandedsources'])
+
+            for i in range(len(self.sqlgroups[group]['expandedsources'])):
+                expsource = self.sqlgroups[group]['expandedsources'][i]
+                exprename = self.sqlgroups[group]['expandedrenames'][i]
+                exptype = self.sqlgroups[group]['expandedtypes'][i]
+                expsize = self.sqlgroups[group]['expandedsizes'][i]
+
+              # Potentially supress source fields, or tag __pdsrc
+                if expsource in self.sqlgroups[group]['sourcefields']:
+                    if allowsources:
+                        print('fff '+expsource + ' as ' + exprename+ '__pdsrc,')
+                        selectedfields = selectedfields + expsource + ' as ' + exprename+ '__pdsrc,'
+                        selectedtypes.append(exptype)
+                        selectedsizes.append(expsize)
+                    else:
+                        print('Excluding source field ', expsource)
+
+                 # Potentially suppress lone (non-lookup) strings
+                elif expsource=='<lookup field>':
+                 # and group+'__'+(self.sqlgroups[group]['expandedfields'][i]).lower() in self.pdfields:
+                    selectedfields = selectedfields + exprename + '__pdlookup as '+exprename+','
+                    selectedtypes.append(exptype)
+                    selectedsizes.append(expsize)
+
+                elif exptype == 'boolean':
+                    selectedfields = selectedfields + '(case when '+expsource+'=1 then 1  when '+expsource+'=0 then 0 end) as '+exprename+','
+                    selectedtypes.append('integer')
+                    selectedsizes.append(expsize)
+
+                # Potentially suppress lone (non-lookup) strings
+                elif allowstrings or exptype != "string": ##or re.match(r'.*__pdlookup', expfield):
+                    # and group+'__'+(self.sqlgroups[group]['expandedfields'][i]).lower() in self.pdfields:
+                    selectedfields = selectedfields + expsource + ' as ' + exprename + ','
                     selectedtypes.append(exptype)
                     selectedsizes.append(expsize)
                 else:
-                    print('Excluding source field ', expfield)
+                    print('Excluding non-lookup string field ', expsource)
 
-            # Potentially suppress lone (non-lookup) strings
-            elif allowstrings or exptype != "<class 'str'>" or re.match(r'.*__pdlookup', expfield):
-                # and group+'__'+(self.sqlgroups[group]['expandedfields'][i]).lower() in self.pdfields:
-                selectedfields = selectedfields + expfield + ','
-                selectedtypes.append(exptype)
-                selectedsizes.append(expsize)
-            else:
-                print('Excluding non-lookup string field ', expfield)
+                if expsource == self.sqlgroups[group]['key']:
+                    self.sqlgroups[group]['key'] = exprename
 
-        ## Trim trailing comma
-        selectedfields = re.sub(',$', '', selectedfields)
-        print('Selected fields1', selectedfields)
+                print('Obj?', self.objectiveset, expsource, exptype, isnumeric(exptype))
+                if not (self.objectiveset) and isnumeric(exptype) and \
+                        re.search('as ' + exprename + '(,|$| )', selectedfields) and \
+                        not (exprename == self.sqlgroups[group]['key'] or exprename == self.mainkey()) \
+                        and (self.pdgroups[group]['cdd_one_to_many'] == 'F'):
+                    self.objective = exprename
+                    self.objectivegroup = group
+                    self.objectiveset = True
+                    print('Setting objective:' + self.objectivegroup, self.objective, exptype)
 
-        ## Strip out lookups flag for final field list...
-        #self.sqlgroups[group]['selectedfields'] = re.sub('__pdlookup', r'', selectedfields).split(',')
-        #print('Selected fields2[]', self.sqlgroups[group]['selectedfields'])
-
-        ## ...but use 'blah blah as lookup__pdlookup' in actual sql
-        selectedfieldsql = re.sub('(([^,]*)__pdlookup)', r'\1 as \2', selectedfields)
-        ##selectedfieldsql =  selectedfields
+            selectedfields = re.sub(',$', '', selectedfields)## Trim trailing comma
+            print('s1', selectedfields)
+            selectedfieldsql=selectedfields
 
 
-        for rn in self.sqlgroups[group]['renamefields']:
+####            for rn in self.sqlgroups[group]['renamefields']:
+####                print('ZZZ', self.sqlgroups[group]['renamefields'][rn])
+####                source = self.sqlgroups[group]['renamefields'][rn]['cdf_source_fieldname']
+####                rename = self.sqlgroups[group]['renamefields'][rn]['cdf_fieldname']
+####                print('rename ', source, ' as ', rename)
+####                if not (re.search('(,|^)' + source + '(,|$| )', selectedfieldsql)):
+####                    print('ERROR:', source, 'not in output field list for ', group, ' - ', selectedfieldsql)
+####                    global errors
+####                    errors = errors + '\n' + 'ERROR: ' + source + ' not in output field list ' + group + ' - ' + selectedfieldsql
+####                selectedfieldsql = re.sub('(,|^)(' + source + ')(,|$)', r'\1\2 as ' + rename + r'\3', selectedfieldsql)
+####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdlookup"(,|$)',
+####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
+####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdsrc"(,|$)',
+####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
+####
 
-            source=self.sqlgroups[group]['renamefields'][rn]['CDF_SOURCE_FIELDNAME']
-            rename=self.sqlgroups[group]['renamefields'][rn]['CDF_FIELDNAME']
-            print('rename ',source, rename)
-            selectedfieldsql = re.sub('(,|^)('+source+')(,|$)', r'\1\2 as '+rename+r'\3', selectedfieldsql)
-            selectedfieldsql = re.sub('(,|^)('+source+') as "'+source+'__pdlookup"(,|$)', r'\1\2 as "'+rename+r'"\3', selectedfieldsql)
-            selectedfieldsql = re.sub('(,|^)('+source+') as "'+source+'__pdsrc"(,|$)', r'\1\2 as "'+rename+r'"\3', selectedfieldsql)
-            print('s5',selectedfieldsql)
+####                if source == self.sqlgroups[group]['key']:
+####                    self.sqlgroups[group]['key'] = rename
+####
+####                    # print('s5', selectedfieldsql)
+####
+####                    ############ set as default objective something that exists in output
+####                for i in range(len(self.sqlgroups[group]['expandedfields'])):
+####                    expfield = self.sqlgroups[group]['expandedfields'][i]
+####                    exptype = self.sqlgroups[group]['expandedtypes'][i]
+####                    if expfield == rename:
+####                        print('Obj?', self.objectiveset, expfield, exptype, isnumeric(exptype))
+####                        if not (self.objectiveset) and isnumeric(exptype) and \
+####                                re.search('(,|^)' + source + '(,|$| )', selectedfieldsql) and \
+####                                not (expfield == self.sqlgroups[group]['key'] or expfield == self.mainkey()) \
+####                                and (self.pdgroups[group]['cdd_one_to_many'] == 'F'):
+####                            self.objective = expfield
+####                            self.objectivegroup = group
+####                            self.objectiveset = True
+####                            print('Setting objective:' + self.objectivegroup, self.objective, exptype)
 
-            if source in booleans:
-                selectedfieldsql = re.sub('(,|^)(' + source + ') as', r'\1(case when \2=1 then 1 else 0 end) as' , selectedfieldsql)
+#####            selectedfieldsql = re.sub('(,|^)[^ ]+(,|$)', r'\1', selectedfieldsql) ## removes double commas?
+#####            selectedfieldsql = re.sub(',$', '', selectedfieldsql)
 
-            if source==self.sqlgroups[group]['key']:
-                self.sqlgroups[group]['key']=rename
+            self.sqlgroups[group]['selectedtypes'] = selectedtypes
+            self.sqlgroups[group]['selectedsizes'] = selectedsizes
 
-        selectedfieldsql = re.sub('(,|^)[^ ]+(,|$)',r'\1', selectedfieldsql)
+            # Replace irregular key with main key, if required
+            if replacekeys and self.sqlgroups[group]['key'] != self.mainkey():
+                oldkey = self.sqlgroups[group]['key']
+                print('Replacing key', oldkey)
+                selectedfieldsql = re.sub(r'(?i)(\s|,|^)' + oldkey + '(\s|,|$)',
+                                          r'\1' + oldkey + ' as ' + self.mainkey() + r'\2', selectedfieldsql, 1)
 
-        print('s6', selectedfieldsql)
+                self.sqlgroups[group]['key'] = self.mainkey()
 
-        self.sqlgroups[group]['selectedtypes'] = selectedtypes
-        self.sqlgroups[group]['selectedsizes'] = selectedsizes
+            # Select wrapper for the selected fields
+            self.sqlgroups[group]['select fields sql'] = 'select \n' + selectedfieldsql + '\nfrom (\n' + \
+                                                         (self.sqlgroups[group]['expanded_sql']) + '\n) __outer_select'
 
+            # Gets field type for final sql
+            self.sqlgroups[group]['finalfields'], self.sqlgroups[group]['finaltypes'], self.sqlgroups[group][
+                'finalsizes'] \
+                = get_field_info(self.sqlgroups[group]['select fields sql'], self.pddb)
+            # print( 'final fields', self.sqlgroups[group]['finalfields'])
 
-        # Replace irregular key with main key, if required
-        if replacekeys and self.sqlgroups[group]['key'] != self.mainkey():
-            oldkey = self.sqlgroups[group]['key']
-            print( 'Replacing key', oldkey)
-            selectedfieldsql = re.sub(r'(?i)(\s|,|^)' + oldkey + '(\s|,|$)',
-                                      r'\1' + oldkey + ' as ' + self.mainkey() + r'\2', selectedfieldsql, 1)
-
-            self.sqlgroups[group]['key']=self.mainkey()
-        # Select wrapper for the selected fields
-        self.sqlgroups[group]['select fields sql'] = 'select \n' + selectedfieldsql + '\nfrom (\n' + \
-                                                     (self.sqlgroups[group]['expanded_sql']) + '\n) __outer_select'
-
-        # Gets field type for final sql
-        self.sqlgroups[group]['finalfields'], self.sqlgroups[group]['finaltypes'], self.sqlgroups[group]['finalsizes'] \
-            = get_field_info(self.sqlgroups[group]['select fields sql'], self.pddb)
-        # print( 'final fields', self.sqlgroups[group]['finalfields'])
-
+####    def select_fieldsOrig(self, group, db):
+####            # Wraps core sql query in an outer select statement,
+####            # suppressing source fields and strings, renaming lookups, renaming renames!
+####
+####            # self.sqlgroups[group]['expandedfields'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
+####            #    'expandedsizes'] \
+####            #    = get_field_info(self.sqlgroups[group]['expanded_sql'], self.pddb)
+####
+####            self.sqlgroups[group]['expandedfields'], self.sqlgroups[group]['expandedtypes'], self.sqlgroups[group][
+####                'expandedsizes'] = get_pdfield_info(self, group, self.pddb)
+####
+####            print('expandedfields', self.sqlgroups[group]['expandedfields'])
+####            selectedfields = ''
+####            selectedtypes = []
+####            selectedsizes = []
+####            booleans = []
+####            # print( 'sourcefields:',self.sqlgroups[group]['sourcefields'])
+####
+####            #### Build list of selected fields and types (ie. not sources for lookups, not a non-lookup string
+####            #### MAYBE (and not 'secret' fields not in domain)
+####            ##
+####            ## !!!!!!!!!!!!!!!  TO do!!
+####            ## get types from select sql, not pdfields (for ghost fields)
+####            # print( 'lookups:', self.sqlgroups[group]['lookups'])
+####
+####            self.sqlgroups[group]['renamedfields'] = {}
+####            #
+####            renamesql = "SELECT [CDF_SOURCE_FIELDNAME], [CDF_FIELDNAME] \
+####                        FROM   [PDSystem].[dbo].[CUST_DOMAIN_FIELD] cdf,  [PDSystem].[dbo].[CUST_DOMAIN_DATA] cdd \
+####                        where cdd_cd_id=" + self.domain + " and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name=N'" + group + "' and CDF_TYPE='DATA'"
+####            #
+####            self.sqlgroups[group]['renamefields'] = querytodict(renamesql, self.pddb, 0)
+####            print(self.sqlgroups[group]['renamefields'])
+####
+####            print('xxx', self.sqlgroups[group]['renamefields'])
+####            for i in range(len(self.sqlgroups[group]['expandedfields'])):
+####                expfield = self.sqlgroups[group]['expandedfields'][i]
+####                exptype = self.sqlgroups[group]['expandedtypes'][i]
+####                if exptype == "<class 'bool'>":
+####                    booleans.append(expfield)
+####                    print('bool', booleans)
+####                expsize = self.sqlgroups[group]['expandedsizes'][i]
+####                # print( 'exptype', expfield, exptype, self.objectiveset,self.sqlgroups[group]['key'],  self.mainkey())
+####                # if not (self.objectiveset) and isnumeric(exptype) and not (
+####                #                expfield == self.sqlgroups[group]['key'] or expfield == self.mainkey()):
+####                #    self.objective = expfield
+####                #    self.objectivegroup = group
+####                #    self.objectiveset = True
+####                #    print('Setting objective:' + self.objectivegroup,self.objective, exptype)
+####
+####                # Potentially supress source fields, or tag __pdsrc
+####                if expfield in self.sqlgroups[group]['sourcefields']:
+####                    if allowsources:
+####                        selectedfields = selectedfields + expfield + ' as "' + expfield + '__pdsrc",'
+####                        selectedtypes.append(exptype)
+####                        selectedsizes.append(expsize)
+####                    else:
+####                        print('Excluding source field ', expfield)
+####
+####                # Potentially suppress lone (non-lookup) strings
+####                elif allowstrings or exptype != "<class 'str'>" or re.match(r'.*__pdlookup', expfield):
+####                    # and group+'__'+(self.sqlgroups[group]['expandedfields'][i]).lower() in self.pdfields:
+####                    selectedfields = selectedfields + expfield + ','
+####                    selectedtypes.append(exptype)
+####                    selectedsizes.append(expsize)
+####                else:
+####                    print('Excluding non-lookup string field ', expfield)
+####
+####            ## Trim trailing comma
+####            selectedfields = re.sub(',$', '', selectedfields)
+####            print('s1', selectedfields)
+####
+####            ## Strip out lookups flag for final field list...
+####            # self.sqlgroups[group]['selectedfields'] = re.sub('__pdlookup', r'', selectedfields).split(',')
+####            # print('Selected fields2[]', self.sqlgroups[group]['selectedfields'])
+####
+####            ## ...but use 'blah blah as lookup__pdlookup' in actual sql
+####            selectedfieldsql = re.sub('(([^,]*)__pdlookup)', r'\1 as \2', selectedfields)
+####            ##selectedfieldsql =  selectedfields
+####
+####
+####            for rn in self.sqlgroups[group]['renamefields']:
+####                print('ZZZ', self.sqlgroups[group]['renamefields'][rn])
+####                source = self.sqlgroups[group]['renamefields'][rn]['cdf_source_fieldname']
+####                rename = self.sqlgroups[group]['renamefields'][rn]['cdf_fieldname']
+####                print('rename ', source, ' as ', rename)
+####                if not (re.search('(,|^)' + source + '(,|$| )', selectedfieldsql)):
+####                    print('ERROR:', source, 'not in output field list for ', group, ' - ', selectedfieldsql)
+####                    global errors
+####                    errors = errors + '\n' + 'ERROR: ' + source + ' not in output field list ' + group + ' - ' + selectedfieldsql
+####                selectedfieldsql = re.sub('(,|^)(' + source + ')(,|$)', r'\1\2 as ' + rename + r'\3', selectedfieldsql)
+####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdlookup"(,|$)',
+####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
+####                selectedfieldsql = re.sub('(,|^)(' + source + ') as "' + source + '__pdsrc"(,|$)',
+####                                          r'\1\2 as "' + rename + r'"\3', selectedfieldsql)
+####
+####                if source in booleans:
+####                    selectedfieldsql = re.sub('(,|^)(' + source + ') as', r'\1(case when \2=1 then 1 else 0 end) as',
+####                                              selectedfieldsql)
+####
+####                if source == self.sqlgroups[group]['key']:
+####                    self.sqlgroups[group]['key'] = rename
+####
+####                    # print('s5', selectedfieldsql)
+####
+####                    ############ set as default objective something that exists in output
+####                for i in range(len(self.sqlgroups[group]['expandedfields'])):
+####                    expfield = self.sqlgroups[group]['expandedfields'][i]
+####                    exptype = self.sqlgroups[group]['expandedtypes'][i]
+####                    if expfield == rename:
+####                        print('Obj?', self.objectiveset, expfield, exptype, isnumeric(exptype))
+####                        if not (self.objectiveset) and isnumeric(exptype) and \
+####                                re.search('(,|^)' + source + '(,|$| )', selectedfieldsql) and \
+####                                not (expfield == self.sqlgroups[group]['key'] or expfield == self.mainkey()) \
+####                                and (self.pdgroups[group]['cdd_one_to_many'] == 'F'):
+####                            self.objective = expfield
+####                            self.objectivegroup = group
+####                            self.objectiveset = True
+####                            print('Setting objective:' + self.objectivegroup, self.objective, exptype)
+####
+####            selectedfieldsql = re.sub('(,|^)[^ ]+(,|$)', r'\1', selectedfieldsql)
+####            selectedfieldsql = re.sub(',$', '', selectedfieldsql)
+####
+####            # print('s6', selectedfieldsql)
+####
+####            self.sqlgroups[group]['selectedtypes'] = selectedtypes
+####            self.sqlgroups[group]['selectedsizes'] = selectedsizes
+####
+####            # Replace irregular key with main key, if required
+####            if replacekeys and self.sqlgroups[group]['key'] != self.mainkey():
+####                oldkey = self.sqlgroups[group]['key']
+####                print('Replacing key', oldkey)
+####                selectedfieldsql = re.sub(r'(?i)(\s|,|^)' + oldkey + '(\s|,|$)',
+####                                          r'\1' + oldkey + ' as ' + self.mainkey() + r'\2', selectedfieldsql, 1)
+####
+####                self.sqlgroups[group]['key'] = self.mainkey()
+####            # Select wrapper for the selected fields
+####            self.sqlgroups[group]['select fields sql'] = 'select \n' + selectedfieldsql + '\nfrom (\n' + \
+####                                                         (self.sqlgroups[group]['expanded_sql']) + '\n) __outer_select'
+####
+####            # Gets field type for final sql
+####            self.sqlgroups[group]['finalfields'], self.sqlgroups[group]['finaltypes'], self.sqlgroups[group][
+####                'finalsizes'] \
+####                = get_field_info(self.sqlgroups[group]['select fields sql'], self.pddb)
+            # print( 'final fields', self.sqlgroups[group]['finalfields'])
 
     def hacksql(self, group):
         # concatenate the 2 sql fields (to get round 4000 character limit)
@@ -416,7 +578,7 @@ class ExplorerDomain:
         self.sqlgroups[group]['bottomlu'] = ''
 
         for l in self.pdlookups:
-
+            print('LOOKUP', self.pdlookups[l]['cdd_name'], self.pdlookups[l]['cdf_fieldname'])
             if self.pdlookups[l]['cdd_name'] == group:
 
                 source = self.pdlookups[l]['cdf_fieldname']
@@ -585,7 +747,6 @@ def explorer_type(type):
     elif type == "<class 'datetime.datetime'>":
         ConvertedType = 'datetime'
 
-
     elif type == "<class 'float'>":
         ConvertedType = 'float'
     elif type == "<class 'decimal.Decimal'>":
@@ -605,9 +766,27 @@ def explorer_type(type):
 
 
 def isnumeric(pytype):
-    numerics = ["<class 'int'>", "<class 'decimal'>", "<class 'float'>"]
+    numerics = ['integer','float']
     return (pytype in numerics)
 
+def get_pdfield_info(self,group,db):
+    pdfieldsql = "SELECT cdf_order_index, cdf_source_fieldname, cdf_fieldname ,  concat([CDF_SOURCE_FIELDNAME], ' as ', [CDF_FIELDNAME]) as rename, cdf_datatype, cdf_size \
+                FROM   [PDSystem].[dbo].[CUST_DOMAIN_FIELD] cdf,  [PDSystem].[dbo].[CUST_DOMAIN_DATA] cdd \
+                where cdd_cd_id=" + self.domain + " and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name=N'" + group + "'  order by cdf_order_index "
+    pdf=querytodict(pdfieldsql,db,0)
+    sourcelist = []
+    renamelist = []
+    typelist = []
+    sizelist = []
+    for i in (pdf):
+        print('PDF',pdf[i])
+        sourcelist.append(pdf[i]['cdf_source_fieldname'])
+        renamelist.append(pdf[i]['cdf_fieldname'])
+        typelist.append(pdf[i]['cdf_datatype'])
+        sizelist.append(pdf[i]['cdf_size'])
+        #sizelist.append(str(datasizes[i]))
+
+    return (sourcelist, renamelist, typelist, sizelist)
 
 def get_field_info(sql, db):
     pypyodbc.lowercase = False
@@ -718,7 +897,7 @@ def test_sql(db, sql, name):
 
         row = x.fetchone()
         print('SQL okay for', name, row[0], 'records')
-        print('(' + str(samplesize) + ' ' + sample +' sample)')
+        print(' sample is top '+ sample)
     except:
 
         print('#######################################################################')
@@ -811,3 +990,4 @@ main()
 print('Nearly Done!!')
 
 print('Done!!')
+print(errors)
