@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-########################################  FROM UKPASUITE 26 Oct 2016
+########################################  FROM ANWB 26 Oct 2016
 ## Author: Rob Simpson
 
 import os
@@ -24,7 +24,7 @@ dsn = 'PDSystem'
 ## 'groups' returns those listed, 'xgroups' returns all but those listed
 # groups=TreatmentHistory
 
-## Objective field, defaults to firt numeric non-key
+## Objective field, defaults to first numeric non-key
 # objective=group.fieldname
 
 ## Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
@@ -46,7 +46,7 @@ replacekeys = False
 allowsources = False ## Not used!
 allowstrings = True  ## Not used!
 write_flat_files = True
-sample = '100 percent'
+sample = '100 ' # eg. '100' (records) or '100 percent'
 
 #####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE ########
 ##### Import any local overrides for the variables above.
@@ -475,7 +475,7 @@ def type_check(group,field,pdtype,odbctype,odbcsize):
         normalisedpdtype = pdtype
     elif pdtype == "int64":
         normalisedpdtype = 'integer'
-        error('Warning: Int64 pdtype for field'+field+' in group '+group)
+        error('Warning: Int64 pdtype for field '+field+' in group '+group)
     elif pdtype == "date":
         normalisedpdtype = 'datetime'
     else:
@@ -505,19 +505,18 @@ def type_check(group,field,pdtype,odbctype,odbcsize):
     if normalisedpdtype=='boolean':
         if normalisedodbctype == 'string': # This is correct
             # Boolean in PD is 'T' / 'F' in the data, Explorer needs to be told it is a Boolean, (and data needs to be converted to 1/0 in text file)
-            error('Not error: Boolean&string for field ' + field + ' in group ' + group + ': ' + normalisedpdtype + ', ' + normalisedodbctype + ' - declaring xmltype as Boolean')
             xmltype = 'boolean'
 
         elif normalisedodbctype == 'boolean':
             # In this case we don't want to pass boolean to Explorer, because we are passing a string
-            error('Warning: Boolean datatype converted to integer for ' + field + ' in group ' + group + ': ' + normalisedpdtype + ', ' + normalisedodbctype+'PD Boolean must be string with values T,F')
+            error('Warning: Boolean datatype converted to string for ' + field + ' in group ' + group + '.  In PD, Boolean should be string with values T,F')
             # Below will ensure data will load.  PYPYODBC writes ('False','True')
             xmltype = 'string'
             print('xmllength',xmllength)
             xmllength = '5'
 
-    if xmltype!=normalisedpdtype:
-        error('Error: Type mismatch for field '+field+' in group '+group+': '+normalisedpdtype+', '+normalisedodbctype+' turned to '+xmltype)
+    if xmltype!=normalisedpdtype and :
+        error('Error: Type mismatch for field '+field+' in group '+group+': In PD is '+normalisedpdtype+', in DB is '+normalisedodbctype)
 
 
     return xmltype, xmllength
@@ -664,9 +663,6 @@ def test_sql(db, sql, name):
             csv.writer(f, quoting=csv.QUOTE_MINIMAL, lineterminator="\n", escapechar='\\', quotechar='"', delimiter=',').writerows(cursor)
 
     connection.close()
-
-
-
 
 
 def main():
