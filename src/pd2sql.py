@@ -36,16 +36,14 @@ hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
 hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
 
 ## Where to write data to
-data_dir = 'C:/PortraitAnalytics/data'
+data_dir = 'D:/PortraitAnalytics/data'
 #data_dir=foo
 
 
 #########  DEFAULTS
 testsql = True
 replacekeys = False
-allowsources = False ## Not used!
-allowstrings = True  ## Not used!
-write_flat_files = False
+write_flat_files = True
 sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
 
 #####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE #############
