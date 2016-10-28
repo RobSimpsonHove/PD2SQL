@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-########################################  FROM UKPASUITE 26 Oct 2016
+########################################  FROM ANWB 28 Oct 2016 13:54
 ## Author: Rob Simpson
 
 import os
@@ -12,7 +12,7 @@ import warnings
 import xml.etree.ElementTree as ET
 import pdsys_sql as sql  # Local file with system table SQL
 
-################## SETTINGS - usually configured in local.py ################
+################## SETTINGS - usually configured in local.py ########################
 ## Domain to extract
 domain = '1007'
 
@@ -24,7 +24,7 @@ dsn = 'PDSystem'
 ## 'groups' returns those listed, 'xgroups' returns all but those listed
 # groups=TreatmentHistory
 
-## Objective field, defaults to firt numeric non-key
+## Objective field, defaults to first numeric non-key
 # objective=group.fieldname
 
 ## Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
@@ -45,10 +45,10 @@ testsql = True
 replacekeys = False
 allowsources = False ## Not used!
 allowstrings = True  ## Not used!
-write_flat_files = True
-sample = '100 percent'
+write_flat_files = False
+sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
 
-#####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE ########
+#####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE #############
 ##### Import any local overrides for the variables above.
 try:
     exec(open('local.py').read())
@@ -102,6 +102,9 @@ class ExplorerDomain:
 
         # Identify the main, onetoone, onetomany groups
         self.make_group_lists()
+        print('Main:',self.main)
+        print('OnetoOne:',self.onetoone)
+        print('OnetoMany:',self.onetomany)
 
         # Generate SQL
         self.group_sql()
@@ -155,7 +158,7 @@ class ExplorerDomain:
                 self.main = group
 
             else:
-                print(self.pdgroups[group])
+
                 if self.pdgroups[group]['cdd_one_to_many'] == 'T':
                     self.onetomany.append(group)
                 else:
@@ -185,8 +188,7 @@ class ExplorerDomain:
                     self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_id_source_fieldname']
 
                 elif self.pdgroups[group]['cdp_paramname'] == 'NULL' or self.pdgroups[group]['cdp_paramname'] == None:
-                    #self.sqlgroups[group]['key'] = self.pdgroups[group]['cdd_key']
-                    error('KEY error on '+group)
+                    warning('KEY error on ' + group)
                     print(errors)
                     raise
 
@@ -194,26 +196,28 @@ class ExplorerDomain:
                     self.sqlgroups[group]['key'] = self.pdgroups[group]['cdp_paramname']
 
 
-                ## Replace key with mainkey if necessary, (and don't currently replace lookup source fieldnames)
-                ## and any given group.hack or all.hack
-                ## Populates: self.sqlgroups[g]['hacked']
+                ## Replace any given group.hack or all.hack
                 self.sqlgroups[group]['hacked'] = self.hacksql(group, hack)
 
                 newsql=self.build_sql(group,self.pddb)
-                print('NEWSQL:\n',newsql)
+                #print('NEWSQL:\n',newsql)
 
-                if testsql or write_flat_files:
-                    test_sql(self.pddb, newsql, group)
-
+                # Write SQL statement out
                 f = open(data_dirnow + '\\' + group + '.sql', 'w', encoding="utf-8")
                 f.write(newsql)
                 f.close()
-                # print( 'Done group SQL')
+
+                if testsql:
+                    test_sql(self, self.pddb, newsql, group)
+
+                if write_flat_files:
+                    write_flatfiles(self.pddb, newsql, group)
 
         return self.sqlgroups
 
+
     def build_sql(self,group,db):
-        print('Building SQL for group ',group)
+        #print('Building SQL for group ',group)
 
         pdfieldsql = sql.pdfieldsql
         pdfields=querytodict(pdfieldsql % (self.domain , group),db, 1)
@@ -254,7 +258,6 @@ class ExplorerDomain:
                 bottomlu=bottomlu+'left outer join ('+str(pdfields[f]['sqltext'])+') '+lutable+' on renamedhacked.'+pdfields[f]['cdf_lookup_key_cdf_fieldname']+'='+lutable+'.'+pdfields[f]['cdf_lookup_key_cdlf_fieldname']+'\n'
 
 
-
         ##  remove trailing commas
         topselect=re.sub(", $","",topselect)
         hackedselect = re.sub(", $", "", hackedselect)
@@ -281,31 +284,21 @@ class ExplorerDomain:
 
         # Gets field type for final sql
         self.sqlgroups[group]['odbcfields'], self.sqlgroups[group]['odbctypes'], self.sqlgroups[group]['xmltype'], self.sqlgroups[group]['odbcsizes'] \
-            = get_odbcfield_info(newsql1, group, self.pddb)
+            = get_odbcfield_info(self,newsql1, group, self.pddb)
 
-        print(self.sqlgroups[group]['odbcfields'])
-        print(self.sqlgroups[group]['odbctypes'])
-        print(self.sqlgroups[group]['odbcsizes'])
+        if self.sqlgroups[group]['odbcfields'] != 'ERROR':
 
+            ## Check matching field types
+            for f in range(len(self.sqlgroups[group]['odbcfields'])):
+                #print('ffff',self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdffields'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['cdftypes'][f])
+                self.sqlgroups[group]['xmltype'][f],self.sqlgroups[group]['odbcsizes'][f]=type_check(group,self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdftypes'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['odbcsizes'][f])
 
-        ## Check matching field types
-        for f in range(len(self.sqlgroups[group]['odbcfields'])):
-            #print('ffff',self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdffields'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['cdftypes'][f])
-            self.sqlgroups[group]['xmltype'][f],self.sqlgroups[group]['odbcsizes'][f]=type_check(group,self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdftypes'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['odbcsizes'][f])
+                if self.sqlgroups[group]['xmltype'][f] == 'boolean':
+                    topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + ')(,|$)',
+                                          r"(case when \1='F' then 0 when \1='T' then 1 end) as \1\2",
+                                       topselect)
 
-            if self.sqlgroups[group]['xmltype'][f] == 'boolean':
-                print('BOOL')
-                print(topselect)
-                topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + ')(,|$)',
-                                      r"(case when \1='F' then 0 when \1='T' then 1 end) as \1\2",
-                                   topselect)
-#                print(hackedselect)
-#                hackedselect = re.sub('(,|^) (' + pdfields[f]['cdf_source_fieldname'] + ') as',
-#                                      r'\1(case when \2=\'F\' then 0 when \2=\'T\' then 1 end) as',
-#                                      hackedselect)
-                print(topselect)
-
-        newsql2 = 'select ' + topselect + '\n' \
+            newsql2 = 'select ' + topselect + '\n' \
                   + 'from (select top ' + sample + '  renamedhacked.* ' \
                   + '\n------- TOPLU\n' \
                   + toplu \
@@ -320,9 +313,9 @@ class ExplorerDomain:
                   + '\n------- BOTTOMLU\n' \
                   + bottomlu \
                   + ') __outer_select'
-        #print(self.sqlgroups[group]['cdffields'])
-        #print(self.sqlgroups[group]['cdftypes'])
-        #print(self.sqlgroups[group]['cdfsizes'])
+
+        else:
+            newsql2='ERROR'
 
         return newsql2
 
@@ -347,7 +340,7 @@ class ExplorerDomain:
 
         for x in range(0, int(len(hacklist) / 2)):
             sql = re.sub(r'' + hacklist[x * 2], r'' + hacklist[x * 2 + 1], sql)
-            print('HACK', hacklist[x * 2], hacklist[x * 2 + 1])
+            #print('HACK', hacklist[x * 2], hacklist[x * 2 + 1])
             # For testing ~ | replacement only, only way to get a tilde into the data by hacking, as it is the hack separator!
             #self.sqlgroups[group]['hacked'] = re.sub(r'€', r'~',self.sqlgroups[group]['hacked'])
 
@@ -359,9 +352,6 @@ class ExplorerDomain:
                           xsd="http://www.w3.org/2001/XMLSchema",
                           xmlns="http://services.analytics.portrait.pb.com/")
 
-        # xml_topdataobjects = ET.SubElement(root, 'dataobjects', xsi="http://www.w3.org/2001/XMLSchema-instance",
-        #                                xsd="http://www.w3.org/2001/XMLSchema",
-        #                                xmlns="http://services.analytics.portrait.pb.com/")
 
         dataobject = self.write_group_xml(root, 'dataobject', [self.main],'main')
 
@@ -455,31 +445,34 @@ class ExplorerDomain:
 
 
 def explorer_size(size):
-    if int(size) > 9999:
-        ConvertedSize=None
-    else:
-        ConvertedSize=size
+    try:
+        if int(size) > 9999:
+            ConvertedSize=None
+        else:
+            ConvertedSize=size
+    except:
+        ConvertedSize = size
 
     return ConvertedSize
 
 
-def error(text):
+def warning(text):
 
-    print('ERROR:', text)
+    print('Warning:', text)
     global errors
     errors = errors + '\n' + 'ERROR: ' + text
 
 def type_check(group,field,pdtype,odbctype,odbcsize):
-    print('GFPO', group,field,pdtype,odbctype)
+    #print('GFPO', group,field,pdtype,odbctype)
     if pdtype in ['string','integer','float','datetime','boolean']:
         normalisedpdtype = pdtype
     elif pdtype == "int64":
         normalisedpdtype = 'integer'
-        error('Warning: Int64 pdtype for field'+field+' in group '+group)
+        warning('Caution: Int64 pdtype for field ' + field + ' in group ' + group + ' converted to integer.')
     elif pdtype == "date":
         normalisedpdtype = 'datetime'
     else:
-        error('Error: Unknown pdtype for field'+field+' in group '+group+':'+pdtype)
+        warning('ERROR: Unknown pdtype for field' + field + ' in group ' + group + ':' + pdtype)
 
     if odbctype == "<class 'str'>":
         normalisedodbctype = 'string'
@@ -496,7 +489,7 @@ def type_check(group,field,pdtype,odbctype,odbcsize):
     elif odbctype == "<class 'bool'>":
         normalisedodbctype = 'boolean'
     else:
-        error('Error: Unknown odbctype for field'+field+' in group '+group+':'+odbctype)
+        warning('ERROR: Unknown odbctype for field' + field + ' in group ' + group + ':' + odbctype)
 
     xmltype=normalisedodbctype
     xmllength=odbcsize
@@ -505,19 +498,17 @@ def type_check(group,field,pdtype,odbctype,odbcsize):
     if normalisedpdtype=='boolean':
         if normalisedodbctype == 'string': # This is correct
             # Boolean in PD is 'T' / 'F' in the data, Explorer needs to be told it is a Boolean, (and data needs to be converted to 1/0 in text file)
-            error('Not error: Boolean&string for field ' + field + ' in group ' + group + ': ' + normalisedpdtype + ', ' + normalisedodbctype + ' - declaring xmltype as Boolean')
             xmltype = 'boolean'
 
         elif normalisedodbctype == 'boolean':
             # In this case we don't want to pass boolean to Explorer, because we are passing a string
-            error('Warning: Boolean datatype converted to integer for ' + field + ' in group ' + group + ': ' + normalisedpdtype + ', ' + normalisedodbctype+'PD Boolean must be string with values T,F')
+            warning('ERROR: Boolean datatype converted to string for ' + field + ' in group ' + group + '.  In PD, Boolean should be string with values T,F')
             # Below will ensure data will load.  PYPYODBC writes ('False','True')
             xmltype = 'string'
-            print('xmllength',xmllength)
             xmllength = '5'
 
-    if xmltype!=normalisedpdtype:
-        error('Error: Type mismatch for field '+field+' in group '+group+': '+normalisedpdtype+', '+normalisedodbctype+' turned to '+xmltype)
+    elif normalisedpdtype!=normalisedodbctype:
+        warning('ERROR: Type mismatch for field ' + field + ' in group ' + group + ': In PD is ' + normalisedpdtype + ', in DB is ' + normalisedodbctype)
 
 
     return xmltype, xmllength
@@ -527,41 +518,47 @@ def isnumeric(pytype):
     numerics = ['integer','float']
     return (pytype in numerics)
 
+
 def get_pdfield_info(self,select,group,db):
     pdfieldsql = "SELECT cdf_order_index, cdf_source_fieldname, cdf_fieldname ,  concat([CDF_SOURCE_FIELDNAME], ' as ', [CDF_FIELDNAME]) as rename, cdf_datatype, cdf_size \
                 FROM   [PDSystem].[dbo].[CUST_DOMAIN_FIELD] cdf,  [PDSystem].[dbo].[CUST_DOMAIN_DATA] cdd \
                 where cdd_cd_id=" + self.domain + " and cdd.cdd_id=cdf.cdf_cdd_id  and cdd.cdd_name=N'" + group + "'  order by cdf_order_index "
-    pdf=querytodict(pdfieldsql,db,2)
+    pdf=querytodict(pdfieldsql,db,2) ## Key on cdf_fieldname
     sourcelist = []
-    renamelist = []
     typelist = []
     sizelist = []
 
-    select=re.sub("[^, ]* as *","",select)
-    select=re.sub(" ","",select)
-    print(select)
-    for f in select.split(','):
-        print('Field:',f,pdf[f]['cdf_fieldname'],pdf[f]['cdf_datatype'],pdf[f]['cdf_size'])
+    # trim select stalement to just resultant field names
+    fields=re.sub("[^, ]* as *","",select)
+    fields=re.sub(" ","",fields)
+    for f in fields.split(','):
+        #print('Field:',f,pdf[f]['cdf_fieldname'],pdf[f]['cdf_datatype'],pdf[f]['cdf_size'])
         sourcelist.append(pdf[f]['cdf_fieldname'])
         typelist.append(pdf[f]['cdf_datatype'])
         sizelist.append(pdf[f]['cdf_size'])
     return (sourcelist, typelist, sizelist)
 
-def get_odbcfield_info(sql, group, db):
+
+def get_odbcfield_info(self,sql, group, db):
     pypyodbc.lowercase = False
 
     connection = pypyodbc.connect(db)
     cur = connection.cursor()
 
     try:
-        print(sql)
+        #print(sql)
         x = cur.execute(sql)
     except:
         print('#######################################################################')
         print(sql)
-        error('SQL error in get_field_info for group '+group)
-        print(errors)
-        raise
+        print('#######################################################################')
+        warning('ERROR: SQL error in get_odbcfield_info for group ' + group)
+        warning('ERROR: DROPPING group ' + group)
+        foo=[x for x in self.onetoone if x not in [group]]
+        self.onetoone=foo
+        foo=[x for x in self.onetomany if x not in [group]]
+        self.onetomany=foo
+        return('ERROR','ERROR','ERROR','ERROR')
 
     connection.close()
     fields = [tuple[0] for tuple in x.description]
@@ -608,7 +605,7 @@ def querytodict(sql, db, n):
     except:
         print('#######################################################################')
         print(sql)
-        error('SQL error in query to dict:')
+        warning('SQL error in query to dict:')
         print(errors)
         raise
 
@@ -629,57 +626,59 @@ def querytodict(sql, db, n):
     return d
 
 
-def test_sql(db, sql, name):
-    connection = pypyodbc.connect(db)
-    cursor = connection.cursor()
-    countrecords = 'select count(*) from (' + sql + ' ) xxx'
+def test_sql(self, db, sql, group):
 
-    try:
+    if not(sql=='ERROR'):
+        connection = pypyodbc.connect(db)
+        cursor = connection.cursor()
+        countrecords = 'select count(*),  count(distinct '+self.sqlgroups[group]['key']+') from (' + sql + ' ) xxx'
 
-        x = cursor.execute(countrecords)
+        try:
+            x = cursor.execute(countrecords)
+            row = x.fetchone()
 
-        row = x.fetchone()
-        print('SQL okay for', name, row[0], 'records')
-        print(' sample is top '+ sample)
-    except:
+            #print('SQL okay for', group, row[0], 'records,', row[1], 'keys')
+            if group not in self.onetomany and row[0]!=row[1]:
+                warning('ERROR: duplicate keys for onetoone group ' + group)
+                warning('ERROR: DROPPING group ' + group)
+                foo=[x for x in self.onetoone if x not in [group]]
+                self.onetoone=foo
 
-        print('#######################################################################')
-        print(sql)
-        error('SQL error in test SQL:')
-        print(errors)
-        raise
+            #print(' sample is top '+ sample)
+        except:
 
-    if write_flat_files:
+            print('#######################################################################')
+            print(sql)
+            warning('SQL error in test SQL:')
+            print(errors)
+            raise
 
+
+def write_flatfiles(db, sql, name):
+
+    if not(sql=='ERROR'):
+        connection = pypyodbc.connect(db)
+        cursor = connection.cursor()
         cur = cursor.execute(sql)
 
-        # print( 'r3', r3)
-        # r4=row2.decode('latin-1').encode('utf-8')
-        # print( 'r4', r3)
-        # print( row2.decode('unicode-escape'))
         if not os.path.exists(data_dirnow + '\\' + name + '_wrap'):
-            os.makedirs(data_dirnow + '\\' + name + '_wrap')
+             os.makedirs(data_dirnow + '\\' + name + '_wrap')
+
         with open(data_dirnow + '\\' + name + '_wrap\\export.txt', 'w', encoding='utf-8') as f:
+             csv.writer(f, quoting=csv.QUOTE_MINIMAL, lineterminator="\n", escapechar='\\', quotechar='"', delimiter=',').writerows(cursor)
 
-            csv.writer(f, quoting=csv.QUOTE_MINIMAL, lineterminator="\n", escapechar='\\', quotechar='"', delimiter=',').writerows(cursor)
-
-    connection.close()
-
-
+        connection.close()
 
 
 
 def main():
-
-    pe = ExplorerDomain()
-
-
-    end = time.strftime("%Y%m%d-%H%M%S")
     print('start',now)
-    print('end  ',end)
+    pe = ExplorerDomain()
+    print('end  ',time.strftime("%Y%m%d-%H%M%S"))
+
+    print('Nearly Done!!')
+    print(errors)
+    print('Done!!')
 
 main()
 
-print('Nearly Done!!')
-print(errors)
-print('Done!!')
