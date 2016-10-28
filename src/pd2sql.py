@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-########################################  FROM ANWB 28 Oct 2016 13:54
+########################################  FROM UKPASUITE 26 Oct 2016
 ## Author: Rob Simpson
 
 import os
@@ -13,40 +13,24 @@ import xml.etree.ElementTree as ET
 import pdsys_sql as sql  # Local file with system table SQL
 
 ################## SETTINGS - usually configured in local.py ########################
-## Domain to extract
-domain = '1007'
+domain = '1001'   # Portrait Dialogue domain to target
+dsn = 'PDSystem'  # Windows ODBC connection to PD System tables
+data_dir = 'D:/PortraitAnalytics/data' # Location for data extracts
 
-## MHSystem DSN
-dsn = 'PDSystem'
+write_flat_files = True
+sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
 
-## OPTIONAL groups or xgroups
-## Neither returns all non-advanced groups in domain,
-## 'groups' returns those listed, 'xgroups' returns all but those listed
-# groups=TreatmentHistory
-
-## Objective field, defaults to first numeric non-key
-# objective=group.fieldname
+# groups='foo1,foo2,...'  # OPTIONAL: groups returns those listed
+# xgroups='bar1,bar2,...'  # OPTIONAL: xgroups returns all those but listed
+# objective=group.fieldname # OPTIONAL: Objective field, defaults to first numeric non-key
 
 ## Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
 ## hack['all']=regex1~replace1~regex2~replace2 (...)
 ## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
-
 hack = {}
 hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
 hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
 
-## Where to write data to
-data_dir = 'C:/PortraitAnalytics/data'
-#data_dir=foo
-
-
-#########  DEFAULTS
-testsql = True
-replacekeys = False
-allowsources = False ## Not used!
-allowstrings = True  ## Not used!
-write_flat_files = False
-sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
 
 #####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE #############
 ##### Import any local overrides for the variables above.
@@ -55,7 +39,9 @@ try:
 except IOError:
     pass
 
-
+testsql = True
+replacekeys = False
+allowstrings = False
 
 warnings.simplefilter('error', UnicodeWarning)
 
@@ -234,14 +220,16 @@ class ExplorerDomain:
             #print('f', pdfields[f])
 
             if pdfields[f]['cdf_type']=='DATA':
+
                 if self.sqlgroups[group]['key']==pdfields[f]['cdf_source_fieldname']:
                     self.sqlgroups[group]['key']=pdfields[f]['cdf_fieldname']
+
                 hackedselect=hackedselect+pdfields[f]['cdf_source_fieldname'] + ' as ' + pdfields[f]['cdf_fieldname'] + ', '
 
-                if pdfields[f]['cdf_advanced_use_only']=='F' or self.sqlgroups[group]['key']==pdfields[f]['cdf_fieldname']:
+                if (pdfields[f]['cdf_advanced_use_only']=='F' and (allowstrings or pdfields[f]['cdf_datatype']!='string')) or self.sqlgroups[group]['key']==pdfields[f]['cdf_fieldname']:
                     topselect=topselect+ pdfields[f]['cdf_fieldname'] + ', '#
 
-                if not (self.objectiveset) \
+                if not(self.objectiveset) \
                         and isnumeric(pdfields[f]['cdf_datatype']) \
                         and pdfields[f]['cdf_advanced_use_only'] == 'F' \
                         and self.pdgroups[group]['cdd_one_to_many'] == 'F':
