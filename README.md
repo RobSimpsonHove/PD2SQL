@@ -33,9 +33,10 @@ and so on
 - write_flat_files = True
 - sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
 
-- ## groups='foo1,foo2,...'  ## OPTIONAL: groups returns those listed
-- ## xgroups='bar1,bar2,...'  ## OPTIONAL: xgroups returns all those but listed
-- ## objective=group.fieldname ## OPTIONAL: Objective field, defaults to first numeric non-key
+# OPTIONAL
+-  groups='foo1,foo2,...'  ## OPTIONAL: groups returns those listed
+-  xgroups='bar1,bar2,...'  ## OPTIONAL: xgroups returns all those but listed
+-  objective=group.fieldname ## OPTIONAL: Objective field, defaults to first numeric non-key
 
 - ##### Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
 - ##### hack['all']=regex1~replace1~regex2~replace2 (...)
@@ -43,3 +44,4 @@ and so on
 - hack = {}
 - hack['all'] = '{MSSQL_?NOLOCK}~ ~\.dbo\.~.[dbo].'
 - hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
+ 
