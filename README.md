@@ -4,19 +4,19 @@
 # Files:
 *pd2sql.py* - Generates SQL, and/or flat files for selected groups in Portrait Dialogue
 
-*pd2sql.properties*   - Configuration, points to Domain, database, and optionally selected groups
+*pdsys_sql.py*  - Contains sql for extracting tables, lookups and fields from PDSYS
 
-*pdsys_sql.py*        - Contains sql for extracting tables, lookups and fields from PDSYS
+*local.py*   - local file only, overrides default configuration
 
 # Usage:
 
-> python pdsql.py {path}/pd2sql.properties (datadir)
+> python pdsql.py 
 
 # Output:
 
-- (datadir)/status_properties
-- (datadir)/ADSmetadata                          Points to datestamp dirs, flat file format
-- (datadir)/YYYYMMDD-HHMMSS/                     Identifies tables structures and relationships
+- (datadir)/status_properties                    Points to datestamp dirs, flat file format
+- (datadir)/YYYYMMDD-HHMMSS/                     
+- (datadir)/YYYYMMDD-HHMMSS/ADSmetadata.html     Identifies tables structures and relationships
 - (datadir)/YYYYMMDD-HHMMSS/Group1_wrap/         Flat file separated data
 - (datadir)/YYYYMMDD-HHMMSS/Group1_wrap/export.txt
 - (datadir)/YYYYMMDD-HHMMSS/Group2_wrap/
@@ -24,15 +24,22 @@
 and so on
 
 
-# Script configuration (defaults):
+# Script configuration (defaults):domain = '1001'   # Portrait Dialogue domain to target
 
--  replacekeys = True     # change them all to main table key, or leave as is
--  allowsources = False   # maintain lookup source fields eg. gender as gender_pdsrc
--  allowstrings = False   # Allow strings that are not lookups to propagate, (eg. perhaps for Cards table,
-                          # otherwise these fields are invisible & unusable in Explorer)
--  write_sql = False      # Write SQL to results directory
--  write_flat_files = True  # Write the flat files with the data in, in format suitable for FF2PE.py
--  top_percent = 100      # sample the data in flat file export
+- domain = '1001'   # Portrait Dialogue domain to target
+- dsn = 'PDSystem'  # Windows ODBC connection to PD System tables
+- data_dir = 'D:/PortraitAnalytics/data' # Location for data extracts
 
-I suggest running initially with (write_sql=True, top_percent=0.01) initially to check groups,
-and that SQL is okay or needs a hack
+- write_flat_files = True
+- sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
+
+- # groups='foo1,foo2,...'  # OPTIONAL: groups returns those listed
+- # xgroups='bar1,bar2,...'  # OPTIONAL: xgroups returns all those but listed
+- # objective=group.fieldname # OPTIONAL: Objective field, defaults to first numeric non-key
+
+- ## Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
+- ## hack['all']=regex1~replace1~regex2~replace2 (...)
+- ## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
+- hack = {}
+- hack['all'] = '{MSSQL_?NOLOCK}~ ~\.dbo\.~.[dbo].'
+- hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
