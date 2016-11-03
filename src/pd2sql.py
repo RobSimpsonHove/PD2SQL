@@ -11,6 +11,7 @@ import codecs
 import warnings
 import xml.etree.ElementTree as ET
 import pdsys_sql as sql  # Local file with system table SQL
+import typecheck  # Local file with ODBC type mappings
 
 ################## SETTINGS - usually configured in local.py ########################
 domain = '1001'   # Portrait Dialogue domain to target
@@ -279,7 +280,9 @@ class ExplorerDomain:
             ## Check matching field types
             for f in range(len(self.sqlgroups[group]['odbcfields'])):
                 #print('ffff',self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdffields'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['cdftypes'][f])
-                self.sqlgroups[group]['xmltype'][f],self.sqlgroups[group]['odbcsizes'][f]=type_check(group,self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdftypes'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['odbcsizes'][f])
+                self.sqlgroups[group]['xmltype'][f],self.sqlgroups[group]['odbcsizes'][f],output=typecheck.type_check(group,self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdftypes'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['odbcsizes'][f])
+                if output:
+                    warning(output)
 
                 if self.sqlgroups[group]['xmltype'][f] == 'boolean':
                     topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + ')(,|$)',
@@ -446,64 +449,13 @@ def explorer_size(size):
 
 def warning(text):
 
-    print('Warning:', text)
+    print( text)
     global errors
-    errors = errors + '\n' + 'ERROR: ' + text
-
-def type_check(group,field,pdtype,odbctype,odbcsize):
-    #print('GFPO', group,field,pdtype,odbctype)
-    if pdtype in ['string','integer','float','datetime','boolean']:
-        normalisedpdtype = pdtype
-    elif pdtype == "int64":
-        normalisedpdtype = 'integer'
-        warning('Caution: Int64 pdtype for field ' + field + ' in group ' + group + ' converted to integer.')
-    elif pdtype == "date":
-        normalisedpdtype = 'datetime'
-    else:
-        warning('ERROR: Unknown pdtype for field' + field + ' in group ' + group + ':' + pdtype)
-
-    if odbctype == "<class 'str'>":
-        normalisedodbctype = 'string'
-    elif odbctype == "<class 'datetime.datetime'>":
-        normalisedodbctype = 'datetime'
-    elif odbctype == "<class 'float'>":
-        normalisedodbctype = 'float'
-    elif odbctype == "<class 'int'>":
-        normalisedodbctype = 'integer'
-    elif odbctype == "<class 'decimal.Decimal'>":
-        normalisedodbctype = 'float'
-    elif odbctype == "<class 'long'>":
-        normalisedodbctype = 'integer'
-    elif odbctype == "<class 'bool'>":
-        normalisedodbctype = 'boolean'
-    else:
-        warning('ERROR: Unknown odbctype for field' + field + ' in group ' + group + ':' + odbctype)
-
-    xmltype=normalisedodbctype
-    xmllength=odbcsize
-
-
-    if normalisedpdtype=='boolean':
-        if normalisedodbctype == 'string': # This is correct
-            # Boolean in PD is 'T' / 'F' in the data, Explorer needs to be told it is a Boolean, (and data needs to be converted to 1/0 in text file)
-            xmltype = 'boolean'
-
-        elif normalisedodbctype == 'boolean':
-            # In this case we don't want to pass boolean to Explorer, because we are passing a string
-            warning('ERROR: Boolean datatype converted to string for ' + field + ' in group ' + group + '.  In PD, Boolean should be string with values T,F')
-            # Below will ensure data will load.  PYPYODBC writes ('False','True')
-            xmltype = 'string'
-            xmllength = '5'
-
-    elif normalisedpdtype!=normalisedodbctype:
-        warning('ERROR: Type mismatch for field ' + field + ' in group ' + group + ': In PD is ' + normalisedpdtype + ', in DB is ' + normalisedodbctype)
-
-
-    return xmltype, xmllength
+    errors = errors + '\n' + text
 
 
 def isnumeric(pytype):
-    numerics = ['integer','float']
+    numerics = ['integer','float']  # Not Int64, unsuitable for objective
     return (pytype in numerics)
 
 
@@ -660,13 +612,14 @@ def write_flatfiles(db, sql, name):
 
 
 def main():
-    print('start',now)
+    start=now
+    print('start',start)
     pe = ExplorerDomain()
-    print('end  ',time.strftime("%Y%m%d-%H%M%S"))
 
-    print('Nearly Done!!')
+    print('\n\nCollated errors:')
     print(errors)
-    print('Done!!')
-
+    print('\nDone!!')
+    print('start',start)
+    print('end  ', time.strftime("%Y%m%d-%H%M%S"))
 main()
 
