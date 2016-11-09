@@ -85,7 +85,6 @@ class ExplorerDomain:
         self.pdgroups = querytodict(tablesql % self.domain, self.pddb, 1)
         self.pdlookups = querytodict(lookupsql % self.domain, self.pddb, 2)
         self.pdfields = querytodict(fieldsql, self.pddb, 0)
-        print('LENGTH',len(self.pdlookups))
 
         # Identify the main, onetoone, onetomany groups
         self.make_group_lists()
@@ -577,7 +576,7 @@ def test_sql(self, db, sql, group):
             x = cursor.execute(countrecords)
             row = x.fetchone()
 
-            #print('SQL okay for', group, row[0], 'records,', row[1], 'keys')
+            print('SQL okay for', group, ': ', row[0], 'records')
             if group not in self.onetomany and row[0]!=row[1]:
                 warning('ERROR: duplicate keys for onetoone group ' + group)
                 warning('ERROR: DROPPING group ' + group)
