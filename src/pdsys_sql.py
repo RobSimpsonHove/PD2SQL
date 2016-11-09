@@ -109,12 +109,12 @@ cdd_name
 ,[cdf_type]      ,[cdf_source_fieldname]     ,[cdf_required]      ,[cdf_size]
 ,[cdf_lookup_cdl_name]     ,[cdf_lookup_key_cdf_fieldname]    ,[cdf_lookup_key_cdlf_fieldname]      ,[cdf_lookup_cdlf_fieldname]
 ,[cdf_lookup_filt_cdf_fieldname]      ,[cdf_lookup_filt_cdlf_fieldname]
-from [pdsystem].[dbo].[cust_domain_field] cdf
-	,[pdsystem].[dbo].[cust_domain_data] cdd
+from cust_domain_field cdf
+	,cust_domain_data cdd
 where cdf.cdf_cdd_id=cdd.cdd_id
 and cdd.cdd_cd_id=%s and cdd.cdd_name=N'%s'
 ) fields
 
-left join  (select cdl_name, cdl_cd_id, [cdl_sd_id] from [pdsystem].[dbo].[cust_domain_lookup] ) cdl on fields.cdf_lookup_cdl_name=cdl.cdl_name and fields.cdd_cd_id=cdl.cdl_cd_id
-left join  (select [ss_sd_id], [ss_sql_text] as sqltext from [pdsystem].[dbo].sql_statement ) ss on cdl.cdl_sd_id=ss.ss_sd_id
+left join  (select cdl_name, cdl_cd_id, [cdl_sd_id] from cust_domain_lookup ) cdl on fields.cdf_lookup_cdl_name=cdl.cdl_name and fields.cdd_cd_id=cdl.cdl_cd_id
+left join  (select [ss_sd_id], [ss_sql_text] as sqltext from sql_statement ) ss on cdl.cdl_sd_id=ss.ss_sd_id
  """
