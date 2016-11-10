@@ -29,8 +29,8 @@ sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file expo
 ## hack['all']=regex1~replace1~regex2~replace2 (...)
 ## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
 hack = {}
-hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
-hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
+# eg. hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
+# eg. hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
 
 
 #####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE #############
@@ -243,7 +243,7 @@ class ExplorerDomain:
                 self.sqlgroups[group]['lookups'].append(pdfields[f]['cdf_fieldname'])
                 lutable='lu_'+str(pdfields[f]['cdf_id'])+'_'+pdfields[f]['cdf_lookup_cdl_name']
                 toplu=toplu+', '+lutable+'.'+pdfields[f]['cdf_lookup_cdlf_fieldname']+' as '+pdfields[f]['cdf_fieldname']+ '__pdlookup''\n'
-                bottomlu=bottomlu+'left outer join ('+str(pdfields[f]['sqltext'])+') '+lutable+' on renamedhacked.'+pdfields[f]['cdf_lookup_key_cdf_fieldname']+'='+lutable+'.'+pdfields[f]['cdf_lookup_key_cdlf_fieldname']+'\n'
+                bottomlu=bottomlu+'left outer join ('+str(pdfields[f]['sqltext'])+') '+lutable+' on renamed.'+pdfields[f]['cdf_lookup_key_cdf_fieldname']+'='+lutable+'.'+pdfields[f]['cdf_lookup_key_cdlf_fieldname']+'\n'
 
 
         ##  remove trailing commas
@@ -251,7 +251,7 @@ class ExplorerDomain:
         hackedselect = re.sub(", $", "", hackedselect)
 
         newsql1=  'select '+topselect+'\n'\
-               + 'from (select top ' +  sample + '  renamedhacked.* ' \
+               + 'from (select top ' +  sample + '  renamed.* ' \
                + '\n------- TOPLU\n'\
                + toplu \
                + '\n------- END TOPLU\n' \
@@ -261,7 +261,7 @@ class ExplorerDomain:
                + self.sqlgroups[group]['hacked'] \
                + '\n    ) hacked'\
                + '\n------- END HACKED\n'\
-               + ' ) renamedhacked  ' \
+               + ' ) renamed  ' \
                + '\n------- BOTTOMLU\n'\
                + bottomlu\
                + ') __outer_select'
@@ -289,7 +289,7 @@ class ExplorerDomain:
                                        topselect)
 
             newsql2 = 'select ' + topselect + '\n' \
-                  + 'from (select top ' + sample + '  renamedhacked.* ' \
+                  + 'from (select top ' + sample + '  renamed.* ' \
                   + '\n------- TOPLU\n' \
                   + toplu \
                   + '\n------- END TOPLU\n' \
@@ -299,7 +299,7 @@ class ExplorerDomain:
                   + self.sqlgroups[group]['hacked'] \
                   + '\n    ) hacked' \
                   + '\n------- END HACKED\n' \
-                  + ' ) renamedhacked  ' \
+                  + ' ) renamed  ' \
                   + '\n------- BOTTOMLU\n' \
                   + bottomlu \
                   + ') __outer_select'
@@ -310,9 +310,7 @@ class ExplorerDomain:
         return newsql2
 
     def hacksql(self, group, hack):
-        # concatenate the 2 sql fields (to get round 4000 character limit)
-        sql = self.pdgroups[group]['ss_sql_text1'] + self.pdgroups[group]['ss_sql_text2']
-
+        sql = self.pdgroups[group]['ss_sql_text']
         # Build tilde-separated hack list from hack['all'] + hack['groupname']
         # hack= regex1~sub1~regex2~sub2 ...
         if 'all' in hack:
@@ -559,7 +557,6 @@ def querytodict(sql, db, n):
         # print(r)
         d[r[n]] = {}
         d[r[n]] = dict(zip(fields, r))
-        # print(type(d[r[n]]['SS_SQL_TEXT1']))
     connection.close()
 
     return d

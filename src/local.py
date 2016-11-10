@@ -3,6 +3,7 @@ domain = '1002'  ## or appropriate domain id
 
 ## MHSystem DSN
 dsn = 'PDSystem'  ## whatever ODBC name to connect to PDSystem data
+# or dsn='PDSystemTest;Uid=username;Pwd=password'
 
 ## Where to write data to
 data_dir = 'C:\PD2SQL\data'  ## any appropriate location for data extracts visable to Explorer box
