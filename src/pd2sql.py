@@ -15,12 +15,12 @@ import odbctypes  # Local file with ODBC type mappings
 import sys
 
 try:
-    specificgroups=sys.argv[1]
+    refreshgroups=sys.argv[1]
 except:
-    specificgroups=None
+    refreshgroups=None
 
-if specificgroups:
-    print('Only exporting specific groups:',specificgroups)
+if refreshgroups:
+    print('Only exporting refresh groups:', refreshgroups)
 
 
 ################## DEFAULT SETTINGS - usually configured in local.py ########################
@@ -102,6 +102,9 @@ class ExplorerDomain:
         # Identify the main, onetoone, onetomany groups
         self.make_group_lists()
         print('Main:',self.main)
+        if self.main in refreshgroups:
+            print('ERROR: cannot refresh main group '+self.main+'.  Main group needs complete rerun')
+            quit()
         print('OnetoOne:',self.onetoone)
         print('OnetoMany:',self.onetomany)
 
@@ -210,7 +213,7 @@ class ExplorerDomain:
                     test_sql(self, self.pddb, newsql, group)
 
                 if write_flat_files:
-                    if not(specificgroups) or group in specificgroups:
+                    if not(refreshgroups) or group in refreshgroups:
                         print('WRITING ',group)
                         write_flatfiles(self.pddb, newsql, group)
 
@@ -474,8 +477,8 @@ class ExplorerDomain:
         f.write('separator=,\n')
         f.write('quote="\n')
         f.write('status=pending\n')
-        if specificgroups:
-            f.write('groups='+specificgroups+'\n')
+        if refreshgroups:
+            f.write('groups=' + refreshgroups + '\n')
         f.write('\n')
         f.write('domain=' + self.domain + '\n')
         f.close()
