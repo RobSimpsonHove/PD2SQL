@@ -11,26 +11,39 @@ import codecs
 import warnings
 import xml.etree.ElementTree as ET
 import pdsys_sql as sql  # Local file with system table SQL
-import typecheck  # Local file with ODBC type mappings
+import odbctypes  # Local file with ODBC type mappings
+import sys
 
-################## SETTINGS - usually configured in local.py ########################
+try:
+    specificgroups=sys.argv[1]
+except:
+    specificgroups=None
+
+if specificgroups:
+    print('Only exporting specific groups:',specificgroups)
+
+
+################## DEFAULT SETTINGS - usually configured in local.py ########################
 domain = '1001'   # Portrait Dialogue domain to target
 dsn = 'PDSystem'  # Windows ODBC connection to PD System tables
 data_dir = 'D:/PortraitAnalytics/data' # Location for data extracts
 
 write_flat_files = True
 sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
+samplecusts=False
+custlike ='%12'  # %12 is 1% sample, %123 is 0.1% sample
 
 # groups='foo1,foo2,...'  # OPTIONAL: groups returns those listed
 # xgroups='bar1,bar2,...'  # OPTIONAL: xgroups returns all those but listed
 # objective=group.fieldname # OPTIONAL: Objective field, defaults to first numeric non-key
 
 ## Hacks:  tilde-separated pair(s) of regex, used to adapt generated SQL
-## hack['all']=regex1~replace1~regex2~replace2 (...)
-## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
 hack = {}
-# eg. hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
-# eg. hack['TransГroup'] = 'SandboxDatabase~[SandboxDatabase]'
+## hack['all']=regex1~replace1~regex2~replace2 (...)
+## hack['all'] = '\Z~where $key like \'%123\''  ## 0.1% sampledir
+## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
+
+# eg. hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].')ha
 
 
 #####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE #############
@@ -197,7 +210,9 @@ class ExplorerDomain:
                     test_sql(self, self.pddb, newsql, group)
 
                 if write_flat_files:
-                    write_flatfiles(self.pddb, newsql, group)
+                    if not(specificgroups) or group in specificgroups:
+                        print('WRITING ',group)
+                        write_flatfiles(self.pddb, newsql, group)
 
         return self.sqlgroups
 
@@ -215,19 +230,28 @@ class ExplorerDomain:
         bottomlu=''
 
         self.sqlgroups[group]['lookups']=[]
+        self.sqlgroups[group]['origkey']=self.sqlgroups[group]['key']
 
+        #print('SETTING KEY1', group, self.sqlgroups[group]['key'])
         for f in pdfields:
             #print('f', pdfields[f])
 
             if pdfields[f]['cdf_type']=='DATA':
 
+                if self.sqlgroups[group]['key'] == pdfields[f]['cdf_fieldname']:
+                    self.sqlgroups[group]['origkey'] = pdfields[f]['cdf_source_fieldname']
+                    #print('SETTING KEY3', group, pdfields[f]['cdf_source_fieldname'])
+
                 if self.sqlgroups[group]['key']==pdfields[f]['cdf_source_fieldname']:
                     self.sqlgroups[group]['key']=pdfields[f]['cdf_fieldname']
+                    self.sqlgroups[group]['origkey']=pdfields[f]['cdf_source_fieldname']
+                    #print('SETTING KEY2',group,pdfields[f]['cdf_source_fieldname'])
+
 
                 hackedselect=hackedselect+pdfields[f]['cdf_source_fieldname'] + ' as ' + pdfields[f]['cdf_fieldname'] + ', '
 
                 if (pdfields[f]['cdf_advanced_use_only']=='F' and (allowstrings or pdfields[f]['cdf_datatype']!='string')) or self.sqlgroups[group]['key']==pdfields[f]['cdf_fieldname']:
-                    topselect=topselect+ pdfields[f]['cdf_fieldname'] + ', '#
+                    topselect=topselect+ pdfields[f]['cdf_fieldname'] + ', '
 
                 if not(self.objectiveset) \
                         and isnumeric(pdfields[f]['cdf_datatype']) \
@@ -249,7 +273,12 @@ class ExplorerDomain:
         ##  remove trailing commas
         topselect=re.sub(", $","",topselect)
         hackedselect = re.sub(", $", "", hackedselect)
+        #print('ZZZ')
+        #print(self.sqlgroups[group]['hacked'])
+        #self.sqlgroups[group]['hacked'] = re.sub("\$key",  origkey, self.sqlgroups[group]['hacked'])
 
+        #print('XXX')
+        #print(self.sqlgroups[group]['hacked'])
         newsql1=  'select '+topselect+'\n'\
                + 'from (select top ' +  sample + '  renamed.* ' \
                + '\n------- TOPLU\n'\
@@ -259,7 +288,6 @@ class ExplorerDomain:
                + 'select '+hackedselect+' from ('\
                + '\n------- HACKED\n'\
                + self.sqlgroups[group]['hacked'] \
-               + '\n    ) hacked'\
                + '\n------- END HACKED\n'\
                + ' ) renamed  ' \
                + '\n------- BOTTOMLU\n'\
@@ -271,22 +299,42 @@ class ExplorerDomain:
             = get_pdfield_info(self, topselect, group, self.pddb)
 
         # Gets field type for final sql
-        self.sqlgroups[group]['odbcfields'], self.sqlgroups[group]['odbctypes'], self.sqlgroups[group]['xmltype'], self.sqlgroups[group]['odbcsizes'] \
-            = get_odbcfield_info(self,newsql1, group, self.pddb)
+        self.sqlgroups[group]['odbcfields'], self.sqlgroups[group]['odbctypes'], self.sqlgroups[group]['xmltype'], self.sqlgroups[group]['odbcsizes'], self.sqlgroups[group]['odbcprecision'], self.sqlgroups[group]['odbcscale'] \
+            = odbctypes.get_odbcfield_info(self,newsql1, group, self.pddb)
 
         if self.sqlgroups[group]['odbcfields'] != 'ERROR':
 
             ## Check matching field types
             for f in range(len(self.sqlgroups[group]['odbcfields'])):
                 #print('ffff',self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdffields'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['cdftypes'][f])
-                self.sqlgroups[group]['xmltype'][f],self.sqlgroups[group]['odbcsizes'][f],output=typecheck.type_check(group,self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdftypes'][f],self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['odbcsizes'][f])
+                self.sqlgroups[group]['xmltype'][f],self.sqlgroups[group]['odbcsizes'][f],output=odbctypes.type_check(group,self.sqlgroups[group]['odbcfields'][f],self.sqlgroups[group]['cdftypes'][f],
+                                                                                                                      self.sqlgroups[group]['odbctypes'][f],self.sqlgroups[group]['odbcsizes'][f],
+                                                                                                                      self.sqlgroups[group]['odbcprecision'][f], self.sqlgroups[group]['odbcscale'][f])
                 if output:
                     warning(output)
 
                 if self.sqlgroups[group]['xmltype'][f] == 'boolean':
-                    topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + ')(,|$)',
-                                          r"(case when \1='F' then 0 when \1='T' then 1 end) as \1\2",
-                                       topselect)
+                    ## Manipulate the data - 'T'->1, 'F-'>0
+                    # print('Before:',topselect)
+                    # print(self.sqlgroups[group]['odbcfields'][f])
+                    # print(''+self.sqlgroups[group]['odbcfields'][f]+'__pdlookup')
+                    if re.search('' + self.sqlgroups[group]['odbcfields'][f] + '__pdlookup', topselect):
+                        # fieldname_pdlookus  -> (case when fieldname_pdlookus="F" then 0 ... )
+                        topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + '__pdlookup)',
+                                           r"(case when \1='F' then 0 when \1='T' then 1 end)", topselect)
+                    else:
+                        topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + ')(,|$)',
+                        r"(case when \1='F' then 0 when \1='T' then 1 end) as \1\2", topselect)
+
+                #if self.sqlgroups[group]['xmltype'][f] == 'boolean':
+                #    topselect = re.sub(' (' + self.sqlgroups[group]['odbcfields'][f] + ')(,|$)',
+                #                       r"(case when \1='F' then 0 when \1='T' then 1 end) as \1\2",
+                #                       topselect)
+
+            if samplecusts:
+                sample_sql=  ' where ' + self.sqlgroups[group]['origkey'] + ' like \''+custlike+'\''
+            else:
+                sample_sql=''
 
             newsql2 = 'select ' + topselect + '\n' \
                   + 'from (select top ' + sample + '  renamed.* ' \
@@ -295,10 +343,10 @@ class ExplorerDomain:
                   + '\n------- END TOPLU\n' \
                   + ' from ( ' \
                   + 'select ' + hackedselect + ' from (' \
-                  + '\n------- HACKED\n' \
+                  + '\n------- HACKED\n'\
                   + self.sqlgroups[group]['hacked'] \
-                  + '\n    ) hacked' \
-                  + '\n------- END HACKED\n' \
+                  + sample_sql \
+                  + '\n------- END HACKED\n'\
                   + ' ) renamed  ' \
                   + '\n------- BOTTOMLU\n' \
                   + bottomlu \
@@ -310,7 +358,7 @@ class ExplorerDomain:
         return newsql2
 
     def hacksql(self, group, hack):
-        sql = self.pdgroups[group]['ss_sql_text']
+        sql = self.pdgroups[group]['ss_sql_text']+ '\n    ) hacked '\
         # Build tilde-separated hack list from hack['all'] + hack['groupname']
         # hack= regex1~sub1~regex2~sub2 ...
         if 'all' in hack:
@@ -410,8 +458,12 @@ class ExplorerDomain:
                 # Flag sources and objective
                 #if re.match('.*__pdsrc', sourcename):
                 #    xml_field.set('pdsource', 'true')
+                if level != 'onetomany' and explorertype != 'string':
+                    xml_field.set('genius', 'true')
+
                 if sourcename == self.objective and group == self.objectivegroup:
                     xml_field.set('objective', 'true')
+                    xml_field.set('genius', 'false')
 
         return xml_object
 
@@ -422,6 +474,8 @@ class ExplorerDomain:
         f.write('separator=,\n')
         f.write('quote="\n')
         f.write('status=pending\n')
+        if specificgroups:
+            f.write('groups='+specificgroups+'\n')
         f.write('\n')
         f.write('domain=' + self.domain + '\n')
         f.close()
@@ -475,43 +529,6 @@ def get_pdfield_info(self,select,group,db):
         sizelist.append(pdf[f]['cdf_size'])
     return (sourcelist, typelist, sizelist)
 
-
-def get_odbcfield_info(self,sql, group, db):
-    pypyodbc.lowercase = False
-
-    connection = pypyodbc.connect(db)
-    cur = connection.cursor()
-
-    try:
-        #print(sql)
-        x = cur.execute(sql)
-    except:
-        print('#######################################################################')
-        print(sql)
-        print('#######################################################################')
-        warning('ERROR: SQL error in get_odbcfield_info for group ' + group)
-        warning('ERROR: DROPPING group ' + group)
-        foo=[x for x in self.onetoone if x not in [group]]
-        self.onetoone=foo
-        foo=[x for x in self.onetomany if x not in [group]]
-        self.onetomany=foo
-        return('ERROR','ERROR','ERROR','ERROR')
-
-    connection.close()
-    fields = [tuple[0] for tuple in x.description]
-    datatypes = [tuple[1] for tuple in x.description]
-    datasizes = [tuple[3] for tuple in x.description]
-
-    fieldlist = []
-    typelist = []
-    xmltypelist = []
-    sizelist = []
-    for i in range(len(fields)):
-        fieldlist.append(fields[i])
-        typelist.append(str(datatypes[i]))
-        xmltypelist.append(str(datatypes[i]))
-        sizelist.append(str(datasizes[i]))
-    return (fieldlist, typelist, xmltypelist, sizelist)
 
 
 def querytolist(sql, db):
@@ -617,5 +634,6 @@ def main():
     print('\nDone!!')
     print('start',start)
     print('end  ', time.strftime("%Y%m%d-%H%M%S"))
+
 main()
 
