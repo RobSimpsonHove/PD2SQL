@@ -102,8 +102,8 @@ class ExplorerDomain:
         # Identify the main, onetoone, onetomany groups
         self.make_group_lists()
         print('Main:',self.main)
-        if self.main in refreshgroups:
-            print('ERROR: cannot refresh main group '+self.main+'.  Main group needs complete rerun')
+        if refreshgroups and self.main in refreshgroups:
+            print('ERROR: cannot do a partial refresh with main group '+self.main+'.  Main group needs a complete rerun')
             quit()
         print('OnetoOne:',self.onetoone)
         print('OnetoMany:',self.onetomany)
