@@ -1,14 +1,14 @@
-## Domain to extract
-domain = '1002'  ## or appropriate domain id
+
+## Domain ID
+domain='1005'
+
+## Where Explorer picks up data from
+data_dir='D:/Analytics/data'
+#data_dir=foo
 
 ## MHSystem DSN
-dsn = 'PDSystem'  ## whatever ODBC name to connect to PDSystem data
-# or dsn='PDSystemTest;Uid=username;Pwd=password'
+dsn='PDSystemTest'
+#dsn='PDSystemTest;Uid=username;Pwd=password'
 
-## Where to write data to
-data_dir = 'C:\PD2SQL\data'  ## any appropriate location for data extracts visable to Explorer box
-
-## Sample data
-sample = '100'  ## eg. '100' (records) or '100 percent' for flat file export.
-
-
+# sample = '0.01 percent'
+sample = '1000'
