@@ -51,7 +51,7 @@ try:
     exec(open('local.py').read())
 except IOError:
     pass
-
+print('Databse:',database)
 if database=='MSS':
     import pdsys_sqlMSS as sql  # Local file with system table SQL
 elif database=='Oracle':
@@ -252,13 +252,13 @@ class ExplorerDomain:
                     self.sqlgroups[group]['origkey'] = pdfields[f]['cdf_source_fieldname']
                     # print('SETTING KEY2',group,pdfields[f]['cdf_source_fieldname'])
 
-                hackedselect = hackedselect + pdfields[f]['cdf_source_fieldname'] + ' as ' + pdfields[f][
-                    'cdf_fieldname'] + ', '
+                hackedselect = hackedselect + '"' + pdfields[f]['cdf_source_fieldname'] + '"' +  ' as ' +  '"' + pdfields[f][
+                    'cdf_fieldname'] + '"' +  ', '
 
                 if (pdfields[f]['cdf_advanced_use_only'] == 'F' and (
                     allowstrings or pdfields[f]['cdf_datatype'] != 'string')) or self.sqlgroups[group]['key'] == \
                         pdfields[f]['cdf_fieldname']:
-                    topselect = topselect + pdfields[f]['cdf_fieldname'] + ', '
+                    topselect = topselect +  '"' + pdfields[f]['cdf_fieldname'] +  '"' + ', '
 
                 if not (self.objectiveset) \
                         and isnumeric(pdfields[f]['cdf_datatype']) \
@@ -551,10 +551,11 @@ def get_pdfield_info(self, select, group, db):
     sizelist = []
 
     # trim select stalement to just resultant field names
-    fields = re.sub("[^, ]* as *", "", select)
+    fields = re.sub('"', '', select)
+    fields = re.sub("[^, ]* as *", "", fields)
     fields = re.sub(" ", "", fields)
     for f in fields.split(','):
-        # print('Field:',f,pdf[f]['cdf_fieldname'],pdf[f]['cdf_datatype'],pdf[f]['cdf_size'])
+        #print('Field:',f,pdf[f]['cdf_fieldname'],pdf[f]['cdf_datatype'],pdf[f]['cdf_size'])
         sourcelist.append(pdf[f]['cdf_fieldname'])
         typelist.append(pdf[f]['cdf_datatype'])
         sizelist.append(pdf[f]['cdf_size'])
@@ -615,12 +616,11 @@ def test_sql(self, db, sql, group):
     if not (sql == 'ERROR'):
         connection = pypyodbc.connect(db)
         cursor = connection.cursor()
-        countrecords = 'select count(*),  count(distinct ' + self.sqlgroups[group]['key'] + ') from (' + sql + ' ) xxx'
-
+        countrecords = 'select count(*),  count(distinct "' + self.sqlgroups[group]['key'] + '") from (' + sql + ' ) xxx'
+        #print(countrecords)
         try:
             x = cursor.execute(countrecords)
             row = x.fetchone()
-
             print('SQL okay for', group, ': ', row[0], 'records')
             if group not in self.onetomany and row[0] != row[1]:
                 warning('ERROR: duplicate keys for onetoone group ' + group)
@@ -632,9 +632,9 @@ def test_sql(self, db, sql, group):
         except:
 
             print('#######################################################################')
-            print(sql)
+            print('BAD SQL;',sql)
             warning('SQL error in test SQL:')
-            print(errors)
+            print('errors:',errors)
             raise
 
 
@@ -770,4 +770,6 @@ def main():
 
 
 main()
+
+
 
