@@ -110,3 +110,17 @@ and cdd.cdd_name=N'%s'
 left join  (select cdl_name, cdl_cd_id, cdl_sd_id from cust_domain_lookup ) cdl on fields.cdf_lookup_cdl_name=cdl.cdl_name and fields.cdd_cd_id=cdl.cdl_cd_id
 left join  (select ss_sd_id, ss_sql_text as sqltext from  sql_statement ) ss on cdl.cdl_sd_id=ss.ss_sd_id
  """
+
+
+pdfieldsql2=""" 
+SELECT cdf_order_index
+, cdf_source_fieldname
+, cdf_fieldname 
+,  CDF_SOURCE_FIELDNAME  || ' as ' || CDF_FIELDNAME  "rename"
+, cdf_datatype
+, cdf_size
+FROM CUST_DOMAIN_FIELD cdf,  CUST_DOMAIN_DATA cdd                 
+where cdd_cd_id=%s and cdd.cdd_id=cdf.cdf_cdd_id  
+and cdd.cdd_name=N'%s'  
+order by cdf_order_index
+ """
