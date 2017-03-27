@@ -3,8 +3,7 @@
 ## Author: Rob Simpson
 
 import os
-import pypyodbc;
-
+import pypyodbc
 pypyodbc.lowercase = True
 import re
 import time
@@ -43,7 +42,7 @@ hack = {}
 ## hack['group'] applies to group SQL only, hack['all'] applies to all group SQL
 
 # eg. hack['all'] = '{MSSQL_?NOLOCK}~~\.dbo\.~.[dbo].'
-#hack['all'] = 'CUSTOMERID = :CustomerNumber~1=1'
+hack['all'] = 'CUSTOMERID = :CustomerNumber~1=1'
 
 #####  ANYTHING ABOVE HERE CAN BE RECONFIGURED IN local.py FILE #############
 ##### Import any local overrides for the variables above.
@@ -252,13 +251,13 @@ class ExplorerDomain:
                     self.sqlgroups[group]['origkey'] = pdfields[f]['cdf_source_fieldname']
                     # print('SETTING KEY2',group,pdfields[f]['cdf_source_fieldname'])
 
-                hackedselect = hackedselect + '"' + pdfields[f]['cdf_source_fieldname'] + '"' +  ' as ' +  '"' + pdfields[f][
-                    'cdf_fieldname'] + '"' +  ', '
+                hackedselect = hackedselect + pdfields[f]['cdf_source_fieldname'] +  ' as ' + pdfields[f][
+                    'cdf_fieldname'] +  ', '
 
                 if (pdfields[f]['cdf_advanced_use_only'] == 'F' and (
                     allowstrings or pdfields[f]['cdf_datatype'] != 'string')) or self.sqlgroups[group]['key'] == \
                         pdfields[f]['cdf_fieldname']:
-                    topselect = topselect +  '"' + pdfields[f]['cdf_fieldname'] +  '"' + ', '
+                    topselect = topselect  + pdfields[f]['cdf_fieldname']  + ', '
 
                 if not (self.objectiveset) \
                         and isnumeric(pdfields[f]['cdf_datatype']) \
