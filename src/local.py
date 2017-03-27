@@ -1,14 +1,17 @@
 
-## Domain ID
-domain='1005'
-
-## Where Explorer picks up data from
-data_dir='D:/Analytics/data'
-#data_dir=foo
+## Domain to extract
+domain = '1002'  ## or appropriate domain id
 
 ## MHSystem DSN
-dsn='PDSystemTest'
-#dsn='PDSystemTest;Uid=username;Pwd=password'
+# dsn = 'PDSystem'  ## whatever ODBC name to connect to PDSystem data
+# or dsn='PDSystemTest;Uid=username;Pwd=password'
+dsn='PDSYSTEM;Uid=MAJOR;Pwd=MAJOR'
 
-# sample = '0.01 percent'
-sample = '1000'
+## Where to write data to
+data_dir = 'C:\\Users\\RO020SI\\Documents\\Testing\\Datadump'  ## any appropriate location for data extracts visable to Explorer box
+
+## Sample data
+sample = '100 percent'  ## eg. '100' (records) or '100 percent' for flat file export.
+
+database="Oracle"  ## Oracle or MSS
+
