@@ -52,17 +52,14 @@ try:
 except IOError:
     pass
 
-if database=="MSS":
+if database=='MSS':
     import pdsys_sqlMSS as sql  # Local file with system table SQL
-elif database=="Oracle":
+elif database=='Oracle':
     import pdsys_sqlOra as sql  # Local file with system table SQL
 else:
-    print('No valid database specified in loacl.py')
+    print('No valid database specified in local.py')
     raise
 
-
-
-import pdsys_sqlOra as sql  # Local file with system table SQL
 
 testsql = True
 replacekeys = False
