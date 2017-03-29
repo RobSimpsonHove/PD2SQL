@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-########################################  FROM UKPASUITE 26 Oct 2016
+########################################  FROM GITHUB 29th March
 ## Author: Rob Simpson
 
 import os
