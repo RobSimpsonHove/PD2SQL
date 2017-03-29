@@ -2,6 +2,8 @@
 ########################################  FROM GITHUB 29th March
 ## Author: Rob Simpson
 
+# TODO Bring back samples (removed for Oracle)
+
 import os
 import pypyodbc
 pypyodbc.lowercase = True
@@ -50,7 +52,7 @@ try:
     exec(open('local.py').read())
 except IOError:
     pass
-print('Databse:',database)
+print('Database:',database)
 if database=='MSS':
     import pdsys_sqlMSS as sql  # Local file with system table SQL
 elif database=='Oracle':
@@ -289,6 +291,7 @@ class ExplorerDomain:
 
         # print('XXX')
         # print(self.sqlgroups[group]['hacked'])
+        #  SAMPLE?? + 'from (select top ' +  sample + '  renamed.* '
         newsql1 = 'select ' + topselect + '\n' \
                   + 'from (select   renamed.* ' \
                   + '\n------- TOPLU\n' \
@@ -440,15 +443,23 @@ class ExplorerDomain:
         for group in list:
             xml_object = ET.SubElement(parent, name, tablename=group, displayname=group, name=group, visible="true")
 
+            # It is OK in PD to declare a parameter binding that uses a case variant of the field name.
+            # However, in Explorer one cannot declare a key that is not exactly equal to one of the listed fields.
+            # So we match the key case-insensitively with the field list, and use the case of the field.
+            key=self.sqlgroups[group]['key']
+            for f in self.sqlgroups[group]['odbcfields']:
+                if key.lower()==f.lower() and key!=f:
+                    warning('Warning: Using '+f+' as key name instead of declared '+key+' in group '+group)
+                    key=f
+
             if level != 'onetomany':
                 xml_primarykeys_g = ET.SubElement(xml_object, 'primarykeys')
-                xml_primarykey_g = ET.SubElement(xml_primarykeys_g, 'primarykey',
-                                                 columnname=self.sqlgroups[group]['key'])
+                xml_primarykey_g = ET.SubElement(xml_primarykeys_g, 'primarykey', columnname=key)
+
 
             if level != 'main':
                 xml_foreignkeys_g = ET.SubElement(xml_object, 'foreignkeys')
-                xml_foreignkey_g = ET.SubElement(xml_foreignkeys_g, 'foreignkey',
-                                                 columnname=self.sqlgroups[group]['key'])
+                xml_foreignkey_g = ET.SubElement(xml_foreignkeys_g, 'foreignkey', columnname=key)
 
             xml_fields_g = ET.SubElement(xml_object, 'fields')
 
@@ -595,7 +606,7 @@ def querytodict(sql, db, n):
         raise
 
     rows = x.fetchall()
-    print(x.description)
+    #print(x.description)
     fields = [tuple[0] for tuple in x.description]
     types = [tuple[1] for tuple in x.description]
     sizes = [tuple[3] for tuple in x.description]
