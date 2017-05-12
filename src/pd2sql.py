@@ -1,6 +1,6 @@
 # -*- encoding: utf-8 -*-
 ########################################  FROM GITHUB 29th March
-## Author: Rob Simpson
+## Author: Rob Simpson May2017
 
 # TODO Bring back samples (removed for Oracle)
 
