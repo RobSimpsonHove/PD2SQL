@@ -6,7 +6,9 @@
 
 *pdsys_sql.py*  - Contains sql for extracting tables, lookups and fields from PDSYS
 
-*local.py*   - local file only, overrides default configuration
+*local.py*   - Local file only, overrides default configuration
+
+*pd2sql.bat*   - Batch file, executes python and maintains log 
 
 # Usage:
 
@@ -24,14 +26,15 @@
 and so on
 
 
-# Script configuration (defaults):domain = '1001'   # Portrait Dialogue domain to target
+# Script configuration (defaults):
 
 - domain = '1001'   # Portrait Dialogue domain to target
-- dsn = 'PDSystem'  # Windows ODBC connection to PD System tables
+- PDdsn = 'PDSystem'  # Windows ODBC connection to PD System tables
+- Datadsn = 'PDSystem'  # Windows ODBC connection to Domain data tables
 - data_dir = 'D:/PortraitAnalytics/data' # Location for data extracts
 
 - write_flat_files = True
-- sample = '100 percent' # eg. '100' (records) or '100 percent' for flat file export.
+- sample = '100' # eg. '100' (records) for flat file export.
 
 # OPTIONAL
 -  groups='foo1,foo2,...'  ## OPTIONAL: groups returns those listed
